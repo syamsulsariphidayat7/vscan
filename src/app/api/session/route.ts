@@ -1,8 +1,26 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { randomPairingCode, SESSION_TTL_MS } from "@/lib/vscan";
+import { randomPairingCode, SESSION_TTL_MS, isSafeWebhookUrl } from "@/lib/vscan";
 
 export const dynamic = "force-dynamic";
+
+// Rate limit sederhana per IP (in-memory): maks 20 sesi per jam per IP —
+// mencegah spam pembuatan sesi / registrasi SSRF target.
+const RATE_LIMIT_PER_HOUR = 20;
+const rateLimit = new Map<string, number[]>();
+
+function allowSessionCreation(ip: string): boolean {
+  const now = Date.now();
+  const windowMs = 60 * 60 * 1000;
+  const times = (rateLimit.get(ip) || []).filter((t) => now - t < windowMs);
+  if (times.length >= RATE_LIMIT_PER_HOUR) {
+    rateLimit.set(ip, times);
+    return false;
+  }
+  times.push(now);
+  rateLimit.set(ip, times);
+  return true;
+}
 
 /**
  * Daftarkan proyek (POS/kasir apa pun) ke VScan → dapat kode pairing.
@@ -29,6 +47,17 @@ export async function POST(req: Request) {
       ? body.webhookToken.trim()
       : null;
 
+  // Rate limit per IP (dari header proxy — Vercel/Next.js menyediakan).
+  const ip = (req.headers.get("x-forwarded-for") || "unknown")
+    .split(",")[0]
+    .trim();
+  if (!allowSessionCreation(ip)) {
+    return NextResponse.json(
+      { error: "Terlalu banyak sesi dibuat — coba lagi nanti" },
+      { status: 429 }
+    );
+  }
+
   if (!label) {
     return NextResponse.json(
       { error: "Label proyek wajib diisi" },
@@ -41,9 +70,21 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
-  if (webhookUrl && !/^https?:\/\//i.test(webhookUrl)) {
+  if (webhookUrl && webhookUrl.length > 500) {
     return NextResponse.json(
-      { error: "URL tujuan harus http(s)://…" },
+      { error: "URL tujuan terlalu panjang (maks 500 karakter)" },
+      { status: 400 }
+    );
+  }
+  if (webhookUrl && !isSafeWebhookUrl(webhookUrl)) {
+    return NextResponse.json(
+      { error: "URL tujuan tidak diizinkan (localhost / IP privat tidak boleh)" },
+      { status: 400 }
+    );
+  }
+  if (webhookToken && webhookToken.length > 200) {
+    return NextResponse.json(
+      { error: "Token terlalu panjang (maks 200 karakter)" },
       { status: 400 }
     );
   }

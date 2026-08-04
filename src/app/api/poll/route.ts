@@ -35,9 +35,12 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Token tidak valid" }, { status: 403 });
   }
 
+  // Claim pending ATAU failed (webhook sempat gagal) — biar tidak ada scan
+  // yang "nyangkut" selamanya ketika URL tujuan down.
+  const CLAIMABLE: ("pending" | "failed")[] = ["pending", "failed"];
   const scans = await prisma.$transaction(async (tx) => {
     const pending = await tx.pendingScan.findMany({
-      where: { sessionId: session.id, status: "pending" },
+      where: { sessionId: session.id, status: { in: CLAIMABLE } },
       select: { id: true },
       orderBy: { createdAt: "asc" },
       take: 100,
@@ -45,7 +48,7 @@ export async function GET(req: Request) {
     if (pending.length === 0) return [];
 
     const claimed = await tx.pendingScan.updateMany({
-      where: { id: { in: pending.map((s) => s.id) }, status: "pending" },
+      where: { id: { in: pending.map((s) => s.id) }, status: { in: CLAIMABLE } },
       data: { status: "polled" },
     });
     if (claimed.count === 0) return [];
