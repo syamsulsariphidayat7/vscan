@@ -76,16 +76,54 @@ curl "localhost:3000/api/poll?code=<KODE>&token=rahasia"
 |---|---|---|
 | `DATABASE_URL` | ✅ | Postgres VScan sendiri. Lokal: `postgresql://postgres@localhost:5432/vscan` |
 
-## Deploy: GitHub → Vercel + Neon
+## Deploy: GitHub → Vercel + Neon (Panduan Lengkap)
 
-1. **Push ke GitHub** (sudah: `git@github.com:syamsulsariphidayat7/vscan.git`).
-2. **Neon** (console.neon.tech): buat project → salin `DATABASE_URL` (koneksi **pooled** untuk
-   runtime, **non-pooled** untuk migrasi).
-3. **Vercel**: Add New Project → repo `vscan` → Environment Variables:
-   - `DATABASE_URL` = URL Neon
-4. **Migrasi DB**: lokal/CI jalankan `pnpm db:deploy` (`prisma migrate deploy`) dengan URL
-   non-pooled terhadap database Neon.
-5. Push ke `main` → auto-deploy. Buka `/register` untuk membuat kode pairing pertama.
+> VScan butuh **database Postgres** (Neon). Tanpa `DATABASE_URL` yang benar, halaman `/`
+> dan `/register` tetap tampil tapi semua operasi DB gagal. Ikuti langkah berikut sekali saja.
+
+### A. Buat project Neon (sekali, ~3 menit)
+
+1. Buka **console.neon.tech** → login (Google/GitHub).
+2. **Create a project** → beri nama (mis. `vscan`) → pilih region terdekat (mis. Singapore)
+   → **Create Project**.
+3. Setelah jadi, buka **Connection Details** → salin **dua** string koneksi:
+   - **Pooled** (untuk runtime Vercel): `postgresql://user:pass@ep-xxx-pooler.us-east-2.aws.neon.tech/vscan?sslmode=require`
+   - **Non-pooled** (untuk migrasi): `postgresql://user:pass@ep-xxx.us-east-2.aws.neon.tech/vscan?sslmode=require`
+
+### B. Set `DATABASE_URL` di Vercel
+
+1. Buka **vercel.com** → project **vscan** → tab **Settings → Environment Variables**.
+2. Tambah: `DATABASE_URL` = string **pooled** dari langkah A.3 → Save.
+3. (Opsional) buka tab **Deployments** → menu `...` pada deployment terakhir → **Redeploy**
+   supaya env baru langsung terpakai.
+
+### C. Jalankan migrasi ke Neon (sekali)
+
+```bash
+# Dari lokal — pakai string NON-POOLED supaya prisma bisa bikin/migrasi tabel.
+DATABASE_URL="postgresql://user:pass@ep-xxx.us-east-2.aws.neon.tech/vscan?sslmode=require" \
+  pnpm db:deploy
+```
+
+> Verifikasi: `npx prisma studio` atau psql → tabel `ScanSession` + `PendingScan` ada.
+
+### D. Push & deploy
+
+```bash
+git add -A && git commit -m "feat: ..." && git push origin main
+```
+
+Push ke `main` → Vercel auto-deploy. Buka `https://vscan-alpha.vercel.app` → buat kode
+pairing pertama di halaman depan (Daftarkan Proyek / POS).
+
+### Troubleshoot
+
+| Gejala | Penyebab / Solusi |
+|---|---|
+| Halaman kosong/500 di produksi | `DATABASE_URL` belum di-set atau salah di Vercel |
+| `migrate deploy` gagal | Pakai URL **non-pooled**, bukan pooled |
+| Scan tidak masuk ke proyek | Pastikan webhook URL publik (bukan localhost) — SSRF diblokir |
+| Sesi hilang setelah 12 jam | Normal — kode pairing kedaluwarsa, buat ulang di `/register` |
 
 > PWA: buka situs sekali lalu *Add to Home Screen* — VScan bisa dipakai seperti aplikasi.
 

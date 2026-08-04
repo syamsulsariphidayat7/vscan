@@ -78,9 +78,40 @@ body {
   animation: pulse-dot 1.6s ease-in-out infinite;
 }
 
+/* Modal overlay: backdrop fade + konten muncul dari bawah */
+@keyframes modal-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-pop {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-modal-fade {
+  animation: modal-fade 0.18s ease-out;
+}
+
+.animate-modal-pop {
+  animation: modal-pop 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-scanline,
-  .animate-pulse-dot {
+  .animate-pulse-dot,
+  .animate-modal-fade,
+  .animate-modal-pop {
     animation: none;
   }
 }

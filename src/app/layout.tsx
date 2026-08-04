@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import "./globals.css";
 import { Toaster } from "sonner";
 import { PwaRegister } from "@/components/pwa-register";
@@ -19,10 +20,22 @@ export const viewport: Viewport = {
   themeColor: "#0d9488",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   viewportFit: "cover",
 };
+
+// Tema mengikuti preferensi sistem (light/dark) — tidak memaksa dark.
+const themeScript = `
+(function () {
+  try {
+    var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    var root = document.documentElement;
+    root.classList.toggle("dark", dark);
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function (e) {
+      root.classList.toggle("dark", e.matches);
+    });
+  } catch (e) {}
+})();
+`;
 
 export default function RootLayout({
   children,
@@ -30,7 +43,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="id" className="dark">
+    <html lang="id" suppressHydrationWarning>
+      <head>
+        <Script id="theme-script" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body className="min-h-dvh antialiased">
         {children}
         <Toaster position="top-center" richColors />

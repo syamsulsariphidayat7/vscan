@@ -172,5 +172,5 @@ export function useBarcodeDetector({
     lastSentAtRef.current = 0;
   }, []);
 
-  return { videoRef, canvasRef, state, reset };
+  return { videoRef, canvasRef, state, reset, streamRef };
 }

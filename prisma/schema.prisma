@@ -19,6 +19,8 @@ datasource db {
 model ScanSession {
   id           String        @id @default(cuid())
   code         String        @unique
+  /// Pemilik sesi (cookie browser pembuat) — untuk daftar sesi milik sendiri.
+  ownerId      String?
   /// Nama proyek / kasir / POS (mis. "Kasir 1 - Apotek Sehat")
   label        String
   /// URL tujuan — VScan mengirim barcode ke sini (webhook). Opsional; tanpa
@@ -33,6 +35,7 @@ model ScanSession {
 
   @@index([code])
   @@index([status])
+  @@index([ownerId, status])
 }
 
 /// Antrean barcode hasil scan HP untuk satu sesi.

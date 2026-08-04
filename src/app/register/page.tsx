@@ -1,176 +1,119 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  Link2,
   Loader2,
-  ArrowLeft,
   Copy,
-  Check,
   ScanLine,
-  Globe,
-  KeyRound,
-  PartyPopper,
+  RefreshCw,
+  PowerOff,
+  QrCode,
+  Plus,
 } from "lucide-react";
 import { toast } from "sonner";
+import { RegisterModal } from "@/components/register-modal";
 
-interface CreatedSession {
+interface SessionInfo {
+  id: string;
   code: string;
   label: string;
-  webhookUrl: string | null;
+  status: string;
   expiresAt: string;
+  /** True bila sesi dibuat dari browser ini → boleh dikelola. */
+  owned: boolean;
+}
+
+function formatExpiry(iso: string): string {
+  return new Date(iso).toLocaleString("id-ID", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 }
 
 export default function RegisterPage() {
-  const [label, setLabel] = useState("");
-  const [webhookUrl, setWebhookUrl] = useState("");
-  const [token, setToken] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [created, setCreated] = useState<CreatedSession | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [sessionsLoaded, setSessionsLoaded] = useState(false);
+  const [actingId, setActingId] = useState<string | null>(null);
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSubmitting(true);
-    try {
-      const res = await fetch("/api/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          label: label.trim(),
-          webhookUrl: webhookUrl.trim() || undefined,
-          webhookToken: token.trim() || undefined,
-        }),
+  // Muat daftar sesi milik browser ini (cookie owner) setelah render.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/session")
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return;
+        setSessions(Array.isArray(data.sessions) ? data.sessions : []);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setSessionsLoaded(true);
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(
-          typeof data.error === "string" ? data.error : "Gagal membuat sesi"
-        );
-        return;
-      }
-      setCreated(data);
-      toast.success("Sesi pairing dibuat!");
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  const copyCode = async () => {
-    if (!created) return;
+  const refreshSessions = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(created.code);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      const res = await fetch("/api/session");
+      const data = await res.json().catch(() => ({}));
+      setSessions(Array.isArray(data.sessions) ? data.sessions : []);
+    } catch {
+      toast.error("Gagal memuat ulang sesi");
+    }
+  }, []);
+
+  // Setelah sesi dibuat di modal → tampilkan di daftar.
+  const handleCreated = useCallback(
+    () => {
+      void refreshSessions();
+    },
+    [refreshSessions]
+  );
+
+  const copyCode = async (code: string) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      toast.success("Kode disalin!");
     } catch {
       toast.error("Gagal menyalin — salin manual dari kotak kode");
     }
   };
 
-  if (created) {
-    return (
-      <main className="flex min-h-dvh flex-col items-center justify-center px-6 py-10">
-        <div className="w-full max-w-md space-y-6">
-          <Link
-            href="/register"
-            onClick={() => setCreated(null)}
-            className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-            Daftar sesi lain
-          </Link>
-
-          <div className="text-center space-y-2">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-strong shadow-lg shadow-primary/30">
-              <PartyPopper className="h-7 w-7 text-white" aria-hidden="true" />
-            </div>
-            <h1 className="text-2xl font-bold tracking-tight">Sesi siap!</h1>
-            <p className="text-sm text-muted-foreground">
-              Proyek <span className="font-medium text-foreground">{created.label}</span>{" "}
-              terdaftar. Tampilkan kode ini di layar kasir.
-            </p>
-          </div>
-
-          {/* Kode pairing */}
-          <div className="rounded-2xl border border-border bg-card p-6 text-center shadow-sm space-y-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Kode Pairing
-            </p>
-            <button
-              type="button"
-              onClick={copyCode}
-              className="mx-auto block font-mono text-5xl font-bold tracking-[0.25em] text-foreground transition-transform hover:scale-[1.02] active:scale-95"
-              aria-label="Salin kode pairing"
-              title="Klik untuk salin"
-            >
-              {created.code}
-            </button>
-            <button
-              type="button"
-              onClick={copyCode}
-              className="inline-flex items-center gap-2 rounded-lg border border-border bg-muted px-4 py-2 text-sm font-medium transition-colors hover:bg-muted/70"
-            >
-              {copied ? (
-                <>
-                  <Check className="h-4 w-4 text-primary" aria-hidden="true" />
-                  Tersalin!
-                </>
-              ) : (
-                <>
-                  <Copy className="h-4 w-4" aria-hidden="true" />
-                  Salin kode
-                </>
-              )}
-            </button>
-            <p className="text-xs text-muted-foreground">
-              Berlaku hingga{" "}
-              {new Date(created.expiresAt).toLocaleString("id-ID", {
-                dateStyle: "medium",
-                timeStyle: "short",
-              })}
-            </p>
-          </div>
-
-          {/* Info tujuan */}
-          <div className="rounded-xl border border-border bg-card/60 px-4 py-3 text-sm space-y-2">
-            <p className="flex items-center gap-2">
-              <Link2 className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-              <span className="text-muted-foreground">Barcode dikirim ke:</span>
-            </p>
-            <p className="break-all font-mono text-xs">
-              {created.webhookUrl ?? "— (tidak ada webhook; pakai GET /api/poll)"}
-            </p>
-          </div>
-
-          {/* Cara pakai */}
-          <div className="space-y-2 text-sm text-muted-foreground">
-            <p className="flex gap-2">
-              <span className="font-mono font-semibold text-foreground">1.</span>
-              Kasir membuka VScan di HP, mengetik kode di atas, lalu scan barcode.
-            </p>
-            <p className="flex gap-2">
-              <span className="font-mono font-semibold text-foreground">2.</span>
-              Tiap scan dikirim ke URL tujuan{" "}
-              <span className="font-mono text-xs">POST {created.webhookUrl}</span>{" "}
-              dengan body{" "}
-              <span className="font-mono text-xs">
-                {"{ code, scanId, barcode, token, timestamp }"}
-              </span>
-              .
-            </p>
-            <p className="flex gap-2">
-              <span className="font-mono font-semibold text-foreground">3.</span>
-              Tanpa webhook, polling{" "}
-              <span className="font-mono text-xs">GET /api/poll?code=…&token=…</span>.
-            </p>
-          </div>
-        </div>
-      </main>
-    );
-  }
+  const actOnSession = useCallback(
+    async (id: string, action: "extend" | "close") => {
+      setActingId(id);
+      try {
+        const res = await fetch("/api/session", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, action }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          toast.error(typeof data.error === "string" ? data.error : "Gagal");
+          return;
+        }
+        toast.success(action === "extend" ? "Sesi diperpanjang 12 jam" : "Sesi ditutup");
+        setSessions((prev) =>
+          prev.map((s) =>
+            s.id === id
+              ? {
+                  ...s,
+                  status: data.session.status,
+                  expiresAt: data.session.expiresAt,
+                }
+              : s
+          )
+        );
+      } finally {
+        setActingId(null);
+      }
+    },
+    []
+  );
 
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center px-6 py-10">
@@ -187,74 +130,137 @@ export default function RegisterPage() {
           </div>
         </div>
 
-        <form onSubmit={submit} className="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-sm">
-          <div className="space-y-1.5">
-            <label htmlFor="label" className="flex items-center gap-1.5 text-sm font-medium">
-              <Globe className="h-4 w-4 text-primary" aria-hidden="true" />
-              Nama proyek / kasir
-            </label>
-            <input
-              id="label"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="contoh: Kasir 1 — Apotek Sehat"
-              className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            />
-          </div>
+        {/* Buka modal pendaftaran */}
+        <button
+          type="button"
+          onClick={() => setModalOpen(true)}
+          className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary-strong text-white font-semibold shadow-sm transition-all hover:bg-primary-hover hover:shadow-md active:scale-[0.98]"
+        >
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          Buat Kode Pairing Baru
+        </button>
 
-          <div className="space-y-1.5">
-            <label htmlFor="webhookUrl" className="flex items-center gap-1.5 text-sm font-medium">
-              <Link2 className="h-4 w-4 text-primary" aria-hidden="true" />
-              URL tujuan (webhook)
-            </label>
-            <input
-              id="webhookUrl"
-              value={webhookUrl}
-              onChange={(e) => setWebhookUrl(e.target.value)}
-              placeholder="https://projek-anda.com/api/terima-scan"
-              inputMode="url"
-              className="h-11 w-full rounded-xl border border-border bg-background px-4 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            />
-            <p className="text-xs text-muted-foreground">
-              Barcode hasil scan HP dikirim ke URL ini via POST. Kosongkan untuk memakai polling.
-            </p>
-          </div>
-
-          <div className="space-y-1.5">
-            <label htmlFor="token" className="flex items-center gap-1.5 text-sm font-medium">
-              <KeyRound className="h-4 w-4 text-primary" aria-hidden="true" />
-              Token rahasia (opsional)
-            </label>
-            <input
-              id="token"
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              placeholder="secret untuk verifikasi webhook / polling"
-              className="h-11 w-full rounded-xl border border-border bg-background px-4 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            />
-          </div>
-
-          {error && (
-            <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
-              {error}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={submitting || !label.trim()}
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary-strong text-white font-semibold shadow-sm transition-all hover:bg-primary-hover hover:shadow-md active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
-          >
-            {submitting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                Membuat sesi…
-              </>
-            ) : (
-              "Buat Kode Pairing"
+        {/* Daftar sesi aktif milik browser ini */}
+        <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <div className="flex items-center justify-between pb-2">
+            <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+              <QrCode className="h-4 w-4 text-primary" aria-hidden="true" />
+              Sesi pairing aktif
+            </h2>
+            {sessionsLoaded && sessions.length > 0 && (
+              <button
+                type="button"
+                onClick={refreshSessions}
+                className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <RefreshCw className="h-3 w-3" aria-hidden="true" />
+                Muat ulang
+              </button>
             )}
-          </button>
-        </form>
+          </div>
+
+          {!sessionsLoaded ? (
+            <p className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+              Memuat sesi…
+            </p>
+          ) : sessions.length === 0 ? (
+            <p className="py-4 text-xs text-muted-foreground">
+              Belum ada proyek terdaftar. Klik &ldquo;Buat Kode Pairing Baru&rdquo; —
+              sesi akan muncul di sini dan bisa dikelola (perpanjang / tutup).
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {sessions.map((s) => (
+                <li
+                  key={s.id}
+                  className="rounded-xl border border-border bg-muted/50 px-3 py-2.5"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-1.5 truncate text-sm font-medium">
+                        <span
+                          className="relative flex h-2 w-2 shrink-0"
+                          aria-hidden="true"
+                        >
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                        </span>
+                        {s.label}
+                      </p>
+                      <p className="font-mono text-xs tracking-widest text-primary">
+                        {s.code}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => copyCode(s.code)}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground transition-colors hover:text-foreground"
+                        aria-label={`Salin kode ${s.code}`}
+                        title="Salin kode"
+                      >
+                        <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
+                      {s.owned ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => actOnSession(s.id, "extend")}
+                            disabled={actingId === s.id}
+                            className="flex h-8 items-center gap-1 rounded-lg border border-border bg-background px-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+                            title="Perpanjang 12 jam"
+                          >
+                            {actingId === s.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                            ) : (
+                              <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                            )}
+                            Perpanjang
+                          </button>
+                          {s.status === "active" && (
+                            <button
+                              type="button"
+                              onClick={() => actOnSession(s.id, "close")}
+                              disabled={actingId === s.id}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition-colors hover:bg-red-100 disabled:opacity-50 dark:border-red-800 dark:bg-red-950/40 dark:text-red-400"
+                              aria-label={`Tutup sesi ${s.code}`}
+                              title="Tutup sesi"
+                            >
+                              <PowerOff className="h-3.5 w-3.5" aria-hidden="true" />
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground">
+                          dari browser lain
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <p className="mt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                    {s.status === "active" ? (
+                      <>
+                        <span className="flex items-center gap-1 rounded bg-emerald-500/10 px-1 py-0.5 text-[9px] font-semibold text-emerald-600 dark:text-emerald-400">
+                          Aktif
+                        </span>
+                        Berlaku hingga{" "}
+                        <span className="font-medium">{formatExpiry(s.expiresAt)}</span>
+                      </>
+                    ) : (
+                      <span className="text-red-500">Sesi ditutup</span>
+                    )}
+                    {s.owned && (
+                      <span className="ml-1 rounded bg-primary/10 px-1 py-0.5 text-[9px] font-medium text-primary">
+                        milik saya
+                      </span>
+                    )}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
         <p className="text-center text-xs text-muted-foreground">
           Mau scan barcode?{" "}
@@ -263,6 +269,12 @@ export default function RegisterPage() {
           </Link>
         </p>
       </div>
+
+      <RegisterModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onCreated={handleCreated}
+      />
     </main>
   );
 }

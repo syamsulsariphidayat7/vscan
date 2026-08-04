@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -13,7 +13,10 @@ import {
   Trash2,
   ArrowLeft,
   Keyboard,
-  Vibrate,
+  Volume2,
+  VolumeX,
+  Zap,
+  Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useBarcodeDetector, type ScanState } from "@/hooks/use-barcode-detector";
@@ -29,6 +32,27 @@ interface ScanLogEntry {
   status: "sent" | "error";
   error?: string;
   time: string;
+}
+
+const LOG_KEY_PREFIX = "vscan-scan-log-";
+
+function loadLog(code: string): ScanLogEntry[] {
+  try {
+    const raw = localStorage.getItem(LOG_KEY_PREFIX + code);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function formatRemaining(ms: number): string {
+  if (ms <= 0) return "Kedaluwarsa";
+  const totalMin = Math.floor(ms / 60000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return h > 0 ? `${h}j ${m}m` : `${m}m`;
 }
 
 function ScanPageInner() {
@@ -47,7 +71,12 @@ function ScanPageInner() {
   const [manualInput, setManualInput] = useState("");
   const [manualOpen, setManualOpen] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
+  const [torchOn, setTorchOn] = useState(false);
+  const [torchSupported, setTorchSupported] = useState<boolean | null>(null);
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const [now, setNow] = useState(Date.now());
   const logIdRef = useRef(0);
+  const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
 
   const handleDetect = async (barcode: string) => {
     // Getaran + bunyi sebagai feedback scan.
@@ -56,7 +85,7 @@ function ScanPageInner() {
     await sendScan(barcode);
   };
 
-  const { videoRef, canvasRef, state, reset } = useBarcodeDetector({
+  const { videoRef, canvasRef, state, reset, streamRef } = useBarcodeDetector({
     active: scanActive && codeValid !== false,
     onDetect: handleDetect,
   });
@@ -75,6 +104,7 @@ function ScanPageInner() {
       if (cancelled) return;
       setCodeValid(result.valid);
       setChecking(false);
+      if (result.expiresAt) setExpiresAt(result.expiresAt);
       if (!result.valid) {
         const message = checkReasonMessage(result.reason);
         toast.error(message);
@@ -88,6 +118,101 @@ function ScanPageInner() {
       cancelled = true;
     };
   }, [code]);
+
+  // Muat log tersimpan untuk kode ini (localStorage).
+  useEffect(() => {
+    if (!code) return;
+    const loaded = loadLog(code);
+    setLog(loaded);
+    // Lanjutkan id dari id terbesar yang pernah ada agar tidak bentrok dengan
+    // entri lama (duplicate React key).
+    const maxId = loaded.reduce((m, e) => Math.max(m, e.id), 0);
+    logIdRef.current = maxId;
+  }, [code]);
+
+  // Simpan log setiap berubah (hapus hanya via tombol Bersihkan / clearLog).
+  useEffect(() => {
+    if (!code || log.length === 0) return;
+    try {
+      localStorage.setItem(LOG_KEY_PREFIX + code, JSON.stringify(log));
+    } catch {
+      // localStorage penuh / tidak tersedia — abaikan.
+    }
+  }, [log, code]);
+
+  // Tick countdown sisa sesi (1 detik).
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Wake Lock: jaga layar tetap menyala selama scan aktif.
+  useEffect(() => {
+    if (!scanActive) return;
+    const win = navigator as Navigator & {
+      wakeLock?: { request: (t: "screen") => Promise<{ release: () => Promise<void> }> };
+    };
+    if (!win.wakeLock) return;
+    let released = false;
+    const acquire = async () => {
+      try {
+        wakeLockRef.current = await win.wakeLock.request("screen");
+      } catch {
+        // Wake Lock tidak tersedia (mis. baterai hemat) — scan tetap jalan.
+      }
+    };
+    acquire();
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && !released) {
+        acquire();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      released = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      wakeLockRef.current?.release().catch(() => {});
+      wakeLockRef.current = null;
+    };
+  }, [scanActive]);
+
+  // Deteksi dukungan senter saat kamera mulai.
+  useEffect(() => {
+    if (state !== "active") {
+      setTorchSupported(null);
+      return;
+    }
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!track) {
+      setTorchSupported(false);
+      return;
+    }
+    if (
+      typeof (track as MediaStreamTrack & { applyConstraints?: unknown })
+        .applyConstraints !== "function"
+    ) {
+      setTorchSupported(false);
+      return;
+    }
+    // Uji dukungan torch secara tentatif (sebagian browser tidak punya properti).
+    setTorchSupported(true);
+  }, [state, streamRef]);
+
+  const toggleTorch = async () => {
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!track) return;
+    try {
+      const next = !torchOn;
+      await track.applyConstraints({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        advanced: [{ torch: next } as any],
+      });
+      setTorchOn(next);
+    } catch {
+      setTorchSupported(false);
+      toast.error("Senter tidak didukung kamera ini");
+    }
+  };
 
   const sendScan = async (barcode: string) => {
     const entry: ScanLogEntry = {
@@ -135,17 +260,29 @@ function ScanPageInner() {
     await sendScan(value);
   };
 
-  const retryEntry = async (entry: ScanLogEntry) => {
-    if (entry.status === "sent") return;
-    const result = await pushBarcode(code, entry.barcode);
-    if (result.ok) {
-      setLog((prev) =>
-        prev.map((l) =>
-          l.id === entry.id ? { ...l, status: "sent", error: undefined } : l
-        )
-      );
-    } else {
-      toast.error(result.error || "Gagal kirim ulang");
+  const retryEntry = useCallback(
+    async (entry: ScanLogEntry) => {
+      if (entry.status === "sent") return;
+      const result = await pushBarcode(code, entry.barcode);
+      if (result.ok) {
+        setLog((prev) =>
+          prev.map((l) =>
+            l.id === entry.id ? { ...l, status: "sent", error: undefined } : l
+          )
+        );
+      } else {
+        toast.error(result.error || "Gagal kirim ulang");
+      }
+    },
+    [code]
+  );
+
+  const clearLog = () => {
+    setLog([]);
+    try {
+      localStorage.removeItem(LOG_KEY_PREFIX + code);
+    } catch {
+      // abaikan
     }
   };
 
@@ -166,6 +303,11 @@ function ScanPageInner() {
         ? "bg-emerald-400"
         : "bg-amber-400";
 
+  const remainingMs =
+    expiresAt && codeValid === true
+      ? new Date(expiresAt).getTime() - now
+      : null;
+
   return (
     <main className="flex min-h-dvh flex-col bg-black text-white">
       {/* Header */}
@@ -177,31 +319,62 @@ function ScanPageInner() {
         >
           <ArrowLeft className="h-4 w-4" />
         </Link>
-        <div className="flex items-center gap-2 font-mono text-sm tracking-widest text-teal-300">
-          <span className="relative flex h-2 w-2">
-            <span
-              className={
-                "absolute inline-flex h-full w-full rounded-full animate-ping " + statusColor
-              }
-            />
-            <span
-              className={"relative inline-flex h-2 w-2 rounded-full " + statusColor}
-            />
-          </span>
-          {code || "—"}
-        </div>
-        <button
-          type="button"
-          onClick={() => setSoundOn((s) => !s)}
-          className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10 transition-colors hover:bg-white/20"
-          aria-label={soundOn ? "Matikan bunyi" : "Nyalakan bunyi"}
-        >
-          {soundOn ? (
-            <Vibrate className="h-4 w-4" />
-          ) : (
-            <span className="text-xs font-bold text-white/50">OFF</span>
+        <div className="flex flex-col items-center">
+          <div className="flex items-center gap-2 font-mono text-sm tracking-widest text-teal-300">
+            <span className="relative flex h-2 w-2">
+              <span
+                className={
+                  "absolute inline-flex h-full w-full rounded-full animate-ping " + statusColor
+                }
+              />
+              <span
+                className={"relative inline-flex h-2 w-2 rounded-full " + statusColor}
+              />
+            </span>
+            {code || "—"}
+          </div>
+          {remainingMs !== null && (
+            <span className="mt-0.5 flex items-center gap-1 text-[10px] text-white/50">
+              <Clock className="h-3 w-3" aria-hidden="true" />
+              Sesi: {formatRemaining(remainingMs)}
+            </span>
           )}
-        </button>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={toggleTorch}
+            disabled={torchSupported === false || state !== "active"}
+            className={
+              "flex h-9 w-9 items-center justify-center rounded-lg transition-colors disabled:pointer-events-none disabled:opacity-30 " +
+              (torchOn
+                ? "bg-amber-400/20 text-amber-300"
+                : "bg-white/10 hover:bg-white/20")
+            }
+            aria-label={torchOn ? "Matikan senter" : "Nyalakan senter"}
+            aria-pressed={torchOn}
+            title="Senter"
+          >
+            <Zap className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setSoundOn((s) => !s)}
+            className={
+              "flex h-9 w-9 items-center justify-center rounded-lg transition-colors " +
+              (soundOn ? "bg-white/10 hover:bg-white/20" : "bg-white/5 text-white/50")
+            }
+            aria-label={soundOn ? "Matikan bunyi" : "Nyalakan bunyi"}
+            aria-pressed={soundOn}
+            title={soundOn ? "Bunyi nyala — ketuk untuk mati" : "Bunyi mati — ketuk untuk nyala"}
+          >
+            {soundOn ? (
+              <Volume2 className="h-4 w-4" />
+            ) : (
+              <VolumeX className="h-4 w-4" />
+            )}
+          </button>
+        </div>
       </header>
 
       {/* Viewport kamera */}
@@ -349,7 +522,7 @@ function ScanPageInner() {
           {log.length > 0 && (
             <button
               type="button"
-              onClick={() => setLog([])}
+              onClick={clearLog}
               className="flex items-center gap-1 text-xs text-white/50 transition-colors hover:text-white"
             >
               <Trash2 className="h-3 w-3" aria-hidden="true" />
