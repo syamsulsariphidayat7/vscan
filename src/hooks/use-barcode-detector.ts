@@ -29,6 +29,13 @@ export interface ScanResult {
  * - Loop deteksi tiap frame dari video ke canvas 2D
  * - Debounce: barcode sama tidak di-report 2x dalam `cooldownMs`
  */
+/**
+ * Barcode harus hilang dari pandangan kamera selama ini (ms) agar kode yang
+ * SAMA boleh dikirim lagi — mencegah kirim dobel saat barcode dipegang diam,
+ * tapi tetap memungkinkan scan 2 unit produk identik.
+ */
+const RE_SEEN_GAP_MS = 350;
+
 export function useBarcodeDetector({
   active,
   onDetect,
@@ -44,7 +51,10 @@ export function useBarcodeDetector({
   const detectorRef = useRef<BarcodeDetectorLike | null>(null);
   const onDetectRef = useRef(onDetect);
   const lastCodeRef = useRef("");
-  const lastDetectedAtRef = useRef(0);
+  // Frame terakhir kode terlihat (untuk mendeteksi "hilang dari view").
+  const lastSeenAtRef = useRef(0);
+  // Terakhir kali kode (apa pun) dilaporkan ke onDetect.
+  const lastSentAtRef = useRef(0);
   const rafRef = useRef<number>(0);
   const [state, setState] = useState<ScanState>("idle");
 
@@ -120,12 +130,27 @@ export function useBarcodeDetector({
             const codes = await detector.detect(canvas);
             const now = Date.now();
             for (const c of codes) {
-              if (c.rawValue && c.rawValue !== lastCodeRef.current) {
-                if (now - lastDetectedAtRef.current > cooldownMs) {
-                  lastCodeRef.current = c.rawValue;
-                  lastDetectedAtRef.current = now;
-                  onDetectRef.current(c.rawValue);
-                }
+              if (!c.rawValue) continue;
+              if (c.rawValue !== lastCodeRef.current) {
+                // Kode baru → kirim.
+                lastCodeRef.current = c.rawValue;
+                lastSeenAtRef.current = now;
+                lastSentAtRef.current = now;
+                onDetectRef.current(c.rawValue);
+              } else if (
+                // Kode sama: kirim ulang HANYA bila sempat hilang dari view
+                // (gap > RE_SEEN_GAP_MS) DAN cooldown sudah lewat — sehingga
+                // 2 unit produk identik bisa di-scan berturut-turut tanpa
+                // restart kamera, tapi barcode yang dipegang diam tidak
+                // terkirim berulang.
+                now - lastSeenAtRef.current > RE_SEEN_GAP_MS &&
+                now - lastSentAtRef.current > cooldownMs
+              ) {
+                lastSeenAtRef.current = now;
+                lastSentAtRef.current = now;
+                onDetectRef.current(c.rawValue);
+              } else {
+                lastSeenAtRef.current = now;
               }
             }
           } catch {
@@ -143,7 +168,8 @@ export function useBarcodeDetector({
   // Reset cooldown barcode saat komponen re-mount / kode baru.
   const reset = useCallback(() => {
     lastCodeRef.current = "";
-    lastDetectedAtRef.current = 0;
+    lastSeenAtRef.current = 0;
+    lastSentAtRef.current = 0;
   }, []);
 
   return { videoRef, canvasRef, state, reset };
