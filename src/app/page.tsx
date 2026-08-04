@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ScanLine,
@@ -137,6 +138,16 @@ export default function HomePage() {
             )}
           </button>
         </div>
+
+        <p className="text-center text-xs text-muted-foreground">
+          Punya proyek / POS?{" "}
+          <Link
+            href="/register"
+            className="font-medium text-primary hover:underline"
+          >
+            Daftarkan proyek & buat kode pairing →
+          </Link>
+        </p>
 
         {/* Cara kerja */}
         <div className="space-y-3">

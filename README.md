@@ -1,115 +1,117 @@
-# VScan — Scanner Barcode HP → POS
+# VScan — Scanner Barcode HP untuk Proyek Apa Pun
 
-Proyek portofolio **Next.js + GitHub + Vercel**: ubah HP jadi scanner barcode wireless untuk POS
-[aplikasi apotek](https://github.com/) (repo `apotek`). Kasir cukup membuat **kode pairing** di POS,
-HP membuka VScan, memasukkan kode, lalu mengarahkan kamera ke barcode obat — barcode langsung
-masuk keranjang POS secara otomatis.
-
-## Arsitektur
+**VScan adalah layanan mandiri**: HP menjadi scanner barcode wireless, dan **proyek apa pun**
+(POS apotek, toko, kafe, aplikasi lain) bisa menerima hasil scan **tanpa mengubah kode proyek**
+untuk urusan pairing — cukup **mendaftarkan URL tujuan** ke VScan.
 
 ```
-┌─────────────┐   scan barcode    ┌──────────────┐   POST /api/push (server VScan)   ┌──────────────┐   POST /api/vscan/push   ┌──────────────┐
-│   HP (VScan) │ ─────────────────▶ │  kamera HP    │ ────────────────────────────────▶ │  Next.js (Vercel) │ ─────────────────────────▶ │  API apotek   │
-│  (PWA)       │                    │ BarcodeDetector│                                │  (proxy server)  │                          │ (Vercel)      │
-└─────────────┘                    └──────────────┘                                └──────────────┘                          └──────┬───────┘
-                                                                                                                                    │ PendingScan
-                                                                                                                                    ▼
-┌─────────────┐   GET /api/vscan/poll (auth) setiap 2 dtk   ┌──────────────┐
-│  POS apotek  │ ◀─────────────────────────────────────────── │  PostgreSQL  │
-└─────────────┘    auto-add ke keranjang                     └──────────────┘
+┌──────────────────┐   ketik kode + scan    ┌─────────────────────────────┐   POST webhook   ┌──────────────────┐
+│  HP (client/PWA) │ ─────────────────────► │   VSCAN SERVER (mandiri)     │ ────────────────► │  PROYEK APA PUN  │
+│  kamera          │  POST /api/push        │  ├─ Database sendiri (Neon) │   {code, scanId,  │  URL yang         │
+│  BarcodeDetector │                        │  │   scan_sessions          │    barcode, token,│  didaftarkan      │
+└──────────────────┘                        │  │   pending_scans           │    timestamp}     └──────────────────┘
+                                            │  └─ kirim ke URL tujuan     │
+                                            └──────────────┬──────────────┘
+                                                           │ fallback polling
+                                                           ▼
+                                              GET /api/poll?code=…&token=…
 ```
 
-- **Pairing berbasis kode**: POS membuat `ScanSession` (kode 6 karakter tanpa karakter ambigu, TTL 12 jam).
-- **Pairing berbasis kode**: POS membuat `ScanSession` (kode 6 karakter tanpa karakter ambigu, TTL 12 jam).
-- **Server proxy VScan**: browser HP HANYA memanggil route VScan sendiri — `POST /api/push` (terusan ke
-  `POST /api/vscan/push` apotek) dan `POST /api/check` (validasi kode via `/api/vscan/check`). CORS apotek
-  tidak relevan; base URL apotek disembunyikan dari browser (`src/lib/server.ts`).
-- **Push**: `POST /api/push` cukup kode pairing — HP tidak perlu login apotek.
-- **Poll (POS)**: `GET /api/vscan/poll` terautentikasi, *claim-on-read* (barcode langsung ditandai
-  consumed agar tidak dobel diproses), POS polling tiap 2 detik lalu memanggil handler barcode yang
-  sama persis dengan scanner USB.
-- **Scanner kamera**: native [Barcode Detection API](https://developer.mozilla.org/en-US/docs/Web/API/BarcodeDetector)
-  (`BarcodeDetector`, format EAN/UPC/CODE128/QR) dengan fallback input manual. Tanpa dependency pihak ketiga.
+## Alur
 
-## Struktur
+1. **Daftarkan proyek**: buka `/register` → isi nama proyek + **URL tujuan** (+ token rahasia opsional)
+   → VScan membuat **kode pairing 6 karakter** (berlaku 12 jam) → tampilkan di layar kasir.
+2. **HP scan**: buka VScan di HP → ketik kode → arahkan kamera ke barcode.
+3. **VScan terima**: barcode disimpan (`pending_scans`) lalu **dikirim ke URL tujuan** via
+   `POST { code, scanId, barcode, token, timestamp }`.
+4. **Proyek terima**: URL tujuan menerima barcode (atau polling `GET /api/poll?code=…&token=…`
+   bila tidak memakai webhook) → diproses sesuai kebutuhan proyek.
 
-```
-vscan/
-├── src/
-│   ├── app/
-│   │   ├── page.tsx        # Landing: input kode pairing + validasi → /scan
-│   │   ├── scan/page.tsx   # Scanner kamera + log scan + status sesi
-│   │   ├── api/
-│   │   │   ├── check/route.ts   # Server: validasi kode pairing (proxy apotek)
-│   │   │   └── push/route.ts    # Server: terusan push barcode (proxy apotek)
-│   │   ├── layout.tsx      # Metadata PWA (manifest, theme, viewport)
-│   │   ├── manifest.ts     # Web App Manifest (standalone, ikon SVG)
-│   │   └── globals.css     # Tailwind v4 + style scan line
-│   ├── components/pwa-register.tsx   # Register service worker (hanya produksi)
-│   ├── hooks/use-barcode-detector.ts # Hook kamera → BarcodeDetector
-│   └── lib/
-│       ├── api.ts          # Klien: pushBarcode() + checkPairingCode() → /api/*
-│       └── server.ts       # Server-only: base URL apotek
-├── public/
-│   ├── sw.js               # Service worker: cache shell (offline siap)
-│   └── icon.svg
-└── .env.example
-```
+> HP hanya butuh kode pairing — tidak tahu proyek apa yang menerima. Satu VScan melayani
+> banyak proyek sekaligus (banyak sesi).
+
+## API
+
+| Endpoint | Auth | Deskripsi |
+|---|---|---|
+| `POST /api/session` | — | Daftarkan proyek. Body `{ label, webhookUrl?, webhookToken? }` → `201 { id, code, expiresAt }` |
+| `POST /api/check` | — | Validasi kode HP. Body `{ code }` → `{ valid, reason: invalid\|not_found\|inactive\|expired }` |
+| `POST /api/push` | kode pairing | Terima scan HP. Body `{ code, barcode }` → simpan + kirim webhook → `201 { ok, id, barcode }` |
+| `GET /api/poll` | `?code=` + `&token=` | Ambil barcode (claim-on-read, tanpa webhook). Response `{ scans: [{ id, barcode }] }` |
+
+**Kontrak webhook** (`POST webhookUrl`): `{ code, scanId, barcode, token, timestamp }` — proyek
+memverifikasi `token` (bila diisi) lalu memproses `barcode`. Sesi tanpa `webhookUrl` → proyek
+memakai `/api/poll` (wajib sertakan `token` bila sesi memakainya).
 
 ## Menjalankan Lokal
 
-Prasyarat: Node ≥ 20, pnpm.
+Prasyarat: Node ≥ 20, pnpm, PostgreSQL lokal.
 
 ```bash
 pnpm install
-cp .env.example .env.local      # set NEXT_PUBLIC_APOTEK_API_URL
-pnpm dev                        # http://localhost:3001
+createdb vscan                              # atau pakai DB lain, sesuaikan .env
+cp .env.example .env                        # set DATABASE_URL
+pnpm db:migrate                             # prisma migrate dev (buat tabel)
+pnpm dev                                    # http://localhost:3000
 ```
 
-> Aplikasi apotek harus jalan di `http://localhost:3000` (lihat repo `apotek`), atau arahkan
-> `NEXT_PUBLIC_APOTEK_API_URL` ke instance apotek lain.
+Uji cepat:
 
-### Alur uji manual
+```bash
+# Daftarkan proyek (URL tujuan = receiver kamu)
+curl -X POST localhost:3000/api/session -H 'Content-Type: application/json' \
+  -d '{"label":"Kasir 1","webhookUrl":"http://localhost:3999/hook","webhookToken":"rahasia"}'
 
-1. Login di POS apotek → halaman POS → klik ikon scanner di baris pencarian → **Buat Sesi**.
-2. Buka VScan di HP (atau browser desktop) → masukkan kode pairing → **Hubungkan**.
-3. Arahkan kamera ke barcode obat → barcode muncul di log VScan **dan** otomatis masuk keranjang POS.
+# Scan dari HP
+curl -X POST localhost:3000/api/push -H 'Content-Type: application/json' \
+  -d '{"code":"<KODE>","barcode":"8991111111111"}'
+
+# Tanpa webhook → polling
+curl "localhost:3000/api/poll?code=<KODE>&token=rahasia"
+```
 
 ## Env Variables
 
 | Variable | Wajib | Deskripsi |
 |---|---|---|
-| `APOTEK_API_URL` | ✅ | Base URL API apotek (dipakai route server VScan). Produksi: `https://apotek.boundless.my.id` |
+| `DATABASE_URL` | ✅ | Postgres VScan sendiri. Lokal: `postgresql://postgres@localhost:5432/vscan` |
 
-> Dipakai **server-side** (route `/api/check` & `/api/push`), jadi browser tidak perlu tahu URL
-> apotek dan CORS apotek tidak relevan. Di Vercel: Settings → Environment Variables (non-`NEXT_PUBLIC`).
+## Deploy: GitHub → Vercel + Neon
 
-## Deploy: GitHub → Vercel
+1. **Push ke GitHub** (sudah: `git@github.com:syamsulsariphidayat7/vscan.git`).
+2. **Neon** (console.neon.tech): buat project → salin `DATABASE_URL` (koneksi **pooled** untuk
+   runtime, **non-pooled** untuk migrasi).
+3. **Vercel**: Add New Project → repo `vscan` → Environment Variables:
+   - `DATABASE_URL` = URL Neon
+4. **Migrasi DB**: lokal/CI jalankan `pnpm db:deploy` (`prisma migrate deploy`) dengan URL
+   non-pooled terhadap database Neon.
+5. Push ke `main` → auto-deploy. Buka `/register` untuk membuat kode pairing pertama.
 
-VScan dirancang sebagai proyek frontend murni (tidak butuh server/database sendiri) — paling mulus
-di Vercel free tier.
+> PWA: buka situs sekali lalu *Add to Home Screen* — VScan bisa dipakai seperti aplikasi.
 
-1. **Buat repo GitHub** (public/private, mis. `vscan`), lalu push:
-   ```bash
-   git init && git add . && git commit -m "VScan: scanner barcode HP ke POS"
-   git remote add origin https://github.com/<user>/vscan.git
-   git branch -M main && git push -u origin main
-   ```
-2. **Import di Vercel**: vercel.com → *Add New → Project* → pilih repo `vscan` (atau `vercel link`
-   dari CLI). Framework terdeteksi otomatis: **Next.js**.
-3. **Environment variables** (Settings → Environment Variables, Production + Preview):
-   - `APOTEK_API_URL` = `https://apotek.boundless.my.id`
-4. **Deploy** — tiap push ke `main` auto-deploy, setiap PR dapat preview deployment otomatis.
-5. **PWA** bekerja di HTTPS Vercel. Setelah buka situs sekali, VScan bisa **Add to Home Screen**
-   (Android Chrome / iOS Safari) dan dibuka standalone seperti aplikasi.
+## Struktur
 
-### Catatan keamanan produksi
-
-- Di repo apotek, set `VSCAN_CORS_ORIGIN` = origin VScan (mis. `https://vscan.vercel.app`) sehingga
-  hanya origin VScan yang boleh push barcode.
-- Kode pairing TTL 12 jam dan sesi hanya satu per user — tutup sesi dari panel POS setelah selesai.
+```
+vscan/
+├── prisma/schema.prisma      # ScanSession + PendingScan (DB mandiri)
+├── src/
+│   ├── app/
+│   │   ├── page.tsx          # Landing HP: input kode pairing
+│   │   ├── register/page.tsx # Daftarkan proyek (label + URL tujuan + token) → kode
+│   │   ├── scan/page.tsx     # Scanner kamera + log + status sesi
+│   │   ├── api/
+│   │   │   ├── session/      # POST — daftar proyek
+│   │   │   ├── check/        # POST — validasi kode HP
+│   │   │   ├── push/         # POST — terima scan + kirim webhook
+│   │   │   └── poll/         # GET  — ambil barcode (fallback)
+│   │   ├── layout.tsx / manifest.ts / globals.css
+│   ├── hooks/use-barcode-detector.ts
+│   └── lib/                  # db.ts (Prisma), vscan.ts (inti), api.ts (klien)
+├── public/sw.js / icon.svg
+└── .env.example
+```
 
 ## Stack
 
-Next.js 16 (App Router) · React 19 · Tailwind CSS v4 · TypeScript · BarcodeDetector API (native) ·
-Service Worker (PWA) · Vercel · lucide-react · sonner
+Next.js 16 (App Router) · Prisma 6 · PostgreSQL (Neon) · Tailwind v4 · TypeScript ·
+BarcodeDetector API (native) · PWA (service worker) · Vercel · lucide-react · sonner

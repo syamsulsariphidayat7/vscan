@@ -1,43 +1,84 @@
 import { NextResponse } from "next/server";
-import { APOTEK_API_URL } from "@/lib/server";
+import { prisma } from "@/lib/db";
+import {
+  lookupActiveSession,
+  deliverWebhook,
+  MAX_PENDING_PER_SESSION,
+} from "@/lib/vscan";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Terusan push barcode ke POST /api/vscan/push apotek (server-side).
- * Status & body apotek diteruskan apa adanya agar klien bisa membedakan
- * 201 (ok), 404 (kode tak dikenal), 410 (sesi ditutup/kedaluwarsa),
- * 429 (antrean penuh).
+ * Terima scan dari HP (client).
+ * POST /api/push  Body: { code, barcode }
+ *
+ * Alur: validasi sesi → simpan PendingScan → kirim ke URL tujuan proyek
+ * (webhook, bila didaftarkan) → tandai delivered/failed. Bila sesi tanpa
+ * webhook, proyek mengambil via GET /api/poll.
  */
 export async function POST(req: Request) {
-  let code = "";
-  let barcode = "";
-  try {
-    const body = await req.json();
-    if (typeof body.code === "string") code = body.code.trim().toUpperCase();
-    if (typeof body.barcode === "string") barcode = body.barcode.trim();
-  } catch {
-    // body tidak valid — fallback ke error di bawah
-  }
+  const body = await req.json().catch(() => ({}));
+  const code = typeof body.code === "string" ? body.code.trim().toUpperCase() : "";
+  const barcode = typeof body.barcode === "string" ? body.barcode.trim() : "";
+
   if (!code || !barcode) {
     return NextResponse.json(
       { ok: false, error: "Kode pairing dan barcode wajib diisi" },
       { status: 400 }
     );
   }
-  try {
-    const res = await fetch(`${APOTEK_API_URL}/api/vscan/push`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code, barcode }),
-      cache: "no-store",
-    });
-    const data = await res.json().catch(() => ({}));
-    return NextResponse.json(data, { status: res.status });
-  } catch {
+  if (!/^[A-Za-z0-9]{3,64}$/.test(barcode)) {
     return NextResponse.json(
-      { ok: false, error: "Tidak bisa terhubung ke server apotek" },
-      { status: 502 }
+      { ok: false, error: "Barcode harus 3–64 karakter alfanumerik" },
+      { status: 400 }
     );
   }
+
+  const found = await lookupActiveSession(code);
+  if (!found.ok) {
+    const reason =
+      found.reason === "not_found"
+        ? "Kode pairing tidak ditemukan"
+        : "Sesi VScan sudah ditutup atau kedaluwarsa";
+    return NextResponse.json({ ok: false, error: reason }, { status: 404 });
+  }
+  const session = found.session;
+
+  // Batasi antrean agar kode tidak bisa dibanjiri.
+  const pendingCount = await prisma.pendingScan.count({
+    where: { sessionId: session.id, status: "pending" },
+  });
+  if (pendingCount >= MAX_PENDING_PER_SESSION) {
+    return NextResponse.json(
+      { ok: false, error: "Antrean VScan penuh — tunggu proyek memproses" },
+      { status: 429 }
+    );
+  }
+
+  const scan = await prisma.pendingScan.create({
+    data: { sessionId: session.id, barcode },
+  });
+
+  // Kirim ke URL tujuan proyek (bila ada) — hasilnya dicatat.
+  const delivery = await deliverWebhook(session, scan);
+  if (delivery.delivered) {
+    await prisma.pendingScan.update({
+      where: { id: scan.id },
+      data: { status: "delivered", attempts: { increment: 1 }, deliveredAt: new Date() },
+    });
+  } else if (!delivery.skipped) {
+    await prisma.pendingScan.update({
+      where: { id: scan.id },
+      data: {
+        status: "failed",
+        attempts: { increment: 1 },
+        lastError: delivery.error ?? "webhook gagal",
+      },
+    });
+  }
+
+  return NextResponse.json(
+    { ok: true, id: scan.id, barcode: scan.barcode },
+    { status: 201 }
+  );
 }

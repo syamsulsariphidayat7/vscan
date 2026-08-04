@@ -18,6 +18,7 @@ export type CheckReason =
   | "invalid"
   | "not_found"
   | "inactive"
+  | "expired"
   | "offline"
   | "server_error";
 
@@ -83,13 +84,15 @@ export async function checkPairingCode(code: string): Promise<CheckResult> {
 export function checkReasonMessage(reason?: CheckReason): string {
   switch (reason) {
     case "not_found":
-      return "Kode pairing tidak ditemukan. Periksa kode di panel VScan POS.";
+      return "Kode pairing tidak ditemukan. Periksa kode yang ditampilkan proyek.";
     case "inactive":
-      return "Sesi VScan sudah ditutup atau kedaluwarsa. Buat sesi baru di POS.";
+      return "Sesi VScan sudah ditutup. Minta proyek membuat sesi baru.";
+    case "expired":
+      return "Kode pairing sudah kedaluwarsa. Minta proyek membuat sesi baru.";
     case "offline":
       return "Tidak bisa terhubung ke server. Pastikan HP online, lalu coba lagi.";
     case "server_error":
-      return "Server apotek sedang bermasalah. Coba lagi sebentar lagi.";
+      return "Server sedang bermasalah. Coba lagi sebentar lagi.";
     case "invalid":
       return "Kode pairing tidak valid.";
     default:

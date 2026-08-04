@@ -79,7 +79,9 @@ function ScanPageInner() {
         const message = checkReasonMessage(result.reason);
         toast.error(message);
         setScanActive(false);
-        if (result.reason === "inactive") setSessionDead(true);
+        if (result.reason === "inactive" || result.reason === "expired") {
+          setSessionDead(true);
+        }
       }
     });
     return () => {
@@ -115,7 +117,7 @@ function ScanPageInner() {
       setLog((prev) => [failed, ...prev].slice(0, 50));
       toast.error(result.error || "Gagal mengirim barcode");
       // Sesi ditutup/kedaluwarsa di tengah pemakaian → hentikan kamera.
-      if (result.status === 410) {
+      if (result.status === 404 || result.status === 410) {
         setSessionDead(true);
         setScanActive(false);
         setCodeValid(false);
