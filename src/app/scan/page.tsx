@@ -17,7 +17,11 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useBarcodeDetector, type ScanState } from "@/hooks/use-barcode-detector";
-import { pushBarcode, checkPairingCode } from "@/lib/api";
+import {
+  pushBarcode,
+  checkPairingCode,
+  checkReasonMessage,
+} from "@/lib/api";
 
 interface ScanLogEntry {
   id: number;
@@ -36,6 +40,8 @@ function ScanPageInner() {
   const [scanActive, setScanActive] = useState(Boolean(initialCode));
   const [checking, setChecking] = useState(Boolean(initialCode));
   const [codeValid, setCodeValid] = useState<boolean | null>(null);
+  // Sesi mati (ditutup/kedaluwarsa) saat sedang scan → hentikan & minta kode baru.
+  const [sessionDead, setSessionDead] = useState(false);
   const [log, setLog] = useState<ScanLogEntry[]>([]);
   const [sending, setSending] = useState(false);
   const [manualInput, setManualInput] = useState("");
@@ -64,13 +70,16 @@ function ScanPageInner() {
     let cancelled = false;
     setChecking(true);
     setCodeValid(null);
-    checkPairingCode(code).then((valid) => {
+    setSessionDead(false);
+    checkPairingCode(code).then((result) => {
       if (cancelled) return;
-      setCodeValid(valid);
+      setCodeValid(result.valid);
       setChecking(false);
-      if (!valid) {
-        toast.error("Kode pairing tidak ditemukan atau sudah kedaluwarsa");
+      if (!result.valid) {
+        const message = checkReasonMessage(result.reason);
+        toast.error(message);
         setScanActive(false);
+        if (result.reason === "inactive") setSessionDead(true);
       }
     });
     return () => {
@@ -105,6 +114,12 @@ function ScanPageInner() {
       };
       setLog((prev) => [failed, ...prev].slice(0, 50));
       toast.error(result.error || "Gagal mengirim barcode");
+      // Sesi ditutup/kedaluwarsa di tengah pemakaian → hentikan kamera.
+      if (result.status === 410) {
+        setSessionDead(true);
+        setScanActive(false);
+        setCodeValid(false);
+      }
     }
   };
 
@@ -140,6 +155,15 @@ function ScanPageInner() {
     error: "Tidak bisa mengakses kamera",
   };
 
+  const connected = codeValid === true && !sessionDead;
+  const statusColor = sessionDead
+    ? "bg-red-400"
+    : codeValid === false
+      ? "bg-red-400"
+      : connected && state === "active"
+        ? "bg-emerald-400"
+        : "bg-amber-400";
+
   return (
     <main className="flex min-h-dvh flex-col bg-black text-white">
       {/* Header */}
@@ -155,23 +179,11 @@ function ScanPageInner() {
           <span className="relative flex h-2 w-2">
             <span
               className={
-                "absolute inline-flex h-full w-full rounded-full " +
-                (codeValid === false
-                  ? "bg-red-400"
-                  : scanActive && state === "active"
-                    ? "bg-emerald-400 animate-ping"
-                    : "bg-amber-400")
+                "absolute inline-flex h-full w-full rounded-full animate-ping " + statusColor
               }
             />
             <span
-              className={
-                "relative inline-flex h-2 w-2 rounded-full " +
-                (codeValid === false
-                  ? "bg-red-400"
-                  : scanActive && state === "active"
-                    ? "bg-emerald-400"
-                    : "bg-amber-400")
-              }
+              className={"relative inline-flex h-2 w-2 rounded-full " + statusColor}
             />
           </span>
           {code || "—"}
@@ -204,7 +216,21 @@ function ScanPageInner() {
 
           {/* Overlay status */}
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-            {state !== "active" && (
+            {sessionDead ? (
+              <div className="flex flex-col items-center gap-3 rounded-2xl bg-black/70 px-6 py-5 text-center backdrop-blur-sm">
+                <XCircle className="h-8 w-8 text-red-400" aria-hidden="true" />
+                <p className="text-sm font-medium text-white">Sesi VScan tidak aktif</p>
+                <p className="text-xs text-white/70">
+                  Minta kasir membuat kode baru di POS.
+                </p>
+                <Link
+                  href="/"
+                  className="pointer-events-auto mt-1 rounded-lg bg-teal-500 px-4 py-2 text-sm font-semibold text-black transition-colors hover:bg-teal-400"
+                >
+                  Ganti Kode
+                </Link>
+              </div>
+            ) : state !== "active" ? (
               <div className="flex flex-col items-center gap-3 text-center px-8">
                 {state === "starting" && (
                   <Loader2 className="h-8 w-8 animate-spin text-teal-300" aria-hidden="true" />
@@ -224,18 +250,18 @@ function ScanPageInner() {
                     : stateLabel[state]}
                 </p>
               </div>
-            )}
+            ) : null}
           </div>
 
           {/* Garis scan */}
-          {state === "active" && codeValid !== false && (
+          {state === "active" && connected && (
             <div className="pointer-events-none absolute inset-x-8">
               <div className="absolute h-0.5 w-full rounded bg-teal-400 shadow-[0_0_12px_rgba(45,212,191,0.9)] animate-scanline" />
             </div>
           )}
 
           {/* Sudut frame */}
-          {state === "active" && codeValid !== false && (
+          {state === "active" && connected && (
             <div className="pointer-events-none absolute inset-6">
               <div className="absolute left-0 top-0 h-10 w-10 rounded-tl-xl border-l-4 border-t-4 border-teal-400" />
               <div className="absolute right-0 top-0 h-10 w-10 rounded-tr-xl border-r-4 border-t-4 border-teal-400" />
@@ -248,9 +274,11 @@ function ScanPageInner() {
 
       {/* Label status bawah viewport */}
       <p className="px-4 pt-3 text-center text-xs text-white/60">
-        {state === "active" && codeValid !== false
-          ? "Arahkan kamera ke barcode produk"
-          : stateLabel[state]}
+        {sessionDead
+          ? "Sesi tidak aktif — ganti kode untuk melanjutkan"
+          : state === "active" && codeValid !== false
+            ? "Arahkan kamera ke barcode produk"
+            : stateLabel[state]}
         {checking && " · Memeriksa kode…"}
       </p>
 

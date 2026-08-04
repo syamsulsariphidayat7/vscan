@@ -8,19 +8,23 @@ masuk keranjang POS secara otomatis.
 ## Arsitektur
 
 ```
-┌─────────────┐   scan barcode    ┌──────────────┐   POST /api/vscan/push (publik + CORS)   ┌──────────────┐
-│   HP (VScan) │ ─────────────────▶ │  kamera HP    │ ──────────────────────────────────────────▶ │  API apotek   │
-│  (PWA)       │                    │ BarcodeDetector│                                          │ (Vercel)      │
-└─────────────┘                    └──────────────┘                                          └──────┬───────┘
-                                                                                                    │ PendingScan
-                                                                                                    ▼
+┌─────────────┐   scan barcode    ┌──────────────┐   POST /api/push (server VScan)   ┌──────────────┐   POST /api/vscan/push   ┌──────────────┐
+│   HP (VScan) │ ─────────────────▶ │  kamera HP    │ ────────────────────────────────▶ │  Next.js (Vercel) │ ─────────────────────────▶ │  API apotek   │
+│  (PWA)       │                    │ BarcodeDetector│                                │  (proxy server)  │                          │ (Vercel)      │
+└─────────────┘                    └──────────────┘                                └──────────────┘                          └──────┬───────┘
+                                                                                                                                    │ PendingScan
+                                                                                                                                    ▼
 ┌─────────────┐   GET /api/vscan/poll (auth) setiap 2 dtk   ┌──────────────┐
 │  POS apotek  │ ◀─────────────────────────────────────────── │  PostgreSQL  │
 └─────────────┘    auto-add ke keranjang                     └──────────────┘
 ```
 
 - **Pairing berbasis kode**: POS membuat `ScanSession` (kode 6 karakter tanpa karakter ambigu, TTL 12 jam).
-- **Push (HP)**: `POST /api/vscan/push` publik + CORS, cukup kode pairing — HP tidak perlu login.
+- **Pairing berbasis kode**: POS membuat `ScanSession` (kode 6 karakter tanpa karakter ambigu, TTL 12 jam).
+- **Server proxy VScan**: browser HP HANYA memanggil route VScan sendiri — `POST /api/push` (terusan ke
+  `POST /api/vscan/push` apotek) dan `POST /api/check` (validasi kode via `/api/vscan/check`). CORS apotek
+  tidak relevan; base URL apotek disembunyikan dari browser (`src/lib/server.ts`).
+- **Push**: `POST /api/push` cukup kode pairing — HP tidak perlu login apotek.
 - **Poll (POS)**: `GET /api/vscan/poll` terautentikasi, *claim-on-read* (barcode langsung ditandai
   consumed agar tidak dobel diproses), POS polling tiap 2 detik lalu memanggil handler barcode yang
   sama persis dengan scanner USB.
@@ -33,14 +37,19 @@ masuk keranjang POS secara otomatis.
 vscan/
 ├── src/
 │   ├── app/
-│   │   ├── page.tsx        # Landing: input kode pairing → /scan
-│   │   ├── scan/page.tsx   # Scanner kamera + log scan + status kirim
+│   │   ├── page.tsx        # Landing: input kode pairing + validasi → /scan
+│   │   ├── scan/page.tsx   # Scanner kamera + log scan + status sesi
+│   │   ├── api/
+│   │   │   ├── check/route.ts   # Server: validasi kode pairing (proxy apotek)
+│   │   │   └── push/route.ts    # Server: terusan push barcode (proxy apotek)
 │   │   ├── layout.tsx      # Metadata PWA (manifest, theme, viewport)
 │   │   ├── manifest.ts     # Web App Manifest (standalone, ikon SVG)
 │   │   └── globals.css     # Tailwind v4 + style scan line
 │   ├── components/pwa-register.tsx   # Register service worker (hanya produksi)
 │   ├── hooks/use-barcode-detector.ts # Hook kamera → BarcodeDetector
-│   └── lib/api.ts          # pushBarcode() + checkPairingCode()
+│   └── lib/
+│       ├── api.ts          # Klien: pushBarcode() + checkPairingCode() → /api/*
+│       └── server.ts       # Server-only: base URL apotek
 ├── public/
 │   ├── sw.js               # Service worker: cache shell (offline siap)
 │   └── icon.svg
@@ -70,10 +79,10 @@ pnpm dev                        # http://localhost:3001
 
 | Variable | Wajib | Deskripsi |
 |---|---|---|
-| `NEXT_PUBLIC_APOTEK_API_URL` | ✅ | Base URL API apotek (endpoint `/api/vscan/push`). Produksi: `https://apotek.boundless.my.id` |
+| `APOTEK_API_URL` | ✅ | Base URL API apotek (dipakai route server VScan). Produksi: `https://apotek.boundless.my.id` |
 
-> Endpoint push apotek diizinkan CORS dari origin mana pun secara default (`VSCAN_CORS_ORIGIN` di
-> repo apotek). Saat go-live, set `VSCAN_CORS_ORIGIN` = origin VScan Anda di Vercel.
+> Dipakai **server-side** (route `/api/check` & `/api/push`), jadi browser tidak perlu tahu URL
+> apotek dan CORS apotek tidak relevan. Di Vercel: Settings → Environment Variables (non-`NEXT_PUBLIC`).
 
 ## Deploy: GitHub → Vercel
 
@@ -89,7 +98,7 @@ di Vercel free tier.
 2. **Import di Vercel**: vercel.com → *Add New → Project* → pilih repo `vscan` (atau `vercel link`
    dari CLI). Framework terdeteksi otomatis: **Next.js**.
 3. **Environment variables** (Settings → Environment Variables, Production + Preview):
-   - `NEXT_PUBLIC_APOTEK_API_URL` = `https://apotek.boundless.my.id`
+   - `APOTEK_API_URL` = `https://apotek.boundless.my.id`
 4. **Deploy** — tiap push ke `main` auto-deploy, setiap PR dapat preview deployment otomatis.
 5. **PWA** bekerja di HTTPS Vercel. Setelah buka situs sekali, VScan bisa **Add to Home Screen**
    (Android Chrome / iOS Safari) dan dibuka standalone seperti aplikasi.
