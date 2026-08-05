@@ -1,155 +1,120 @@
-# VScan — Scanner Barcode HP untuk Proyek Apa Pun
+# VScan — HP jadi Scanner Barcode Nirkabel
 
-**VScan adalah layanan mandiri**: HP menjadi scanner barcode wireless, dan **proyek apa pun**
-(POS apotek, toko, kafe, aplikasi lain) bisa menerima hasil scan **tanpa mengubah kode proyek**
-untuk urusan pairing — cukup **mendaftarkan URL tujuan** ke VScan.
+VScan adalah layanan mandiri yang mengubah **HP menjadi scanner barcode** dan
+mengirim hasilnya ke **proyek/POS apa pun** — tanpa mengubah kode proyek.
+Barcode masuk otomatis lewat **Scanner Agent** di komputer kasir (ketik ke OS
+seperti scanner USB), atau via webhook/polling.
 
 ```
-┌──────────────────┐   ketik kode + scan    ┌─────────────────────────────┐   POST webhook   ┌──────────────────┐
-│  HP (client/PWA) │ ─────────────────────► │   VSCAN SERVER (mandiri)     │ ────────────────► │  PROYEK APA PUN  │
-│  kamera          │  POST /api/push        │  ├─ Database sendiri (Neon) │   {code, scanId,  │  URL yang         │
-│  BarcodeDetector │                        │  │   scan_sessions          │    barcode, token,│  didaftarkan      │
-└──────────────────┘                        │  │   pending_scans           │    timestamp}     └──────────────────┘
-                                            │  └─ kirim ke URL tujuan     │
-                                            └──────────────┬──────────────┘
-                                                           │ fallback polling
-                                                           ▼
-                                              GET /api/poll?code=…&token=…
+HP (kamera) ──scan──► VScan (vscan.boundless.my.id) ──► Komputer kasir
+                         │  DB Neon: sesi + antrean barcode   ├─ Scanner Agent (ketik ke POS)
+                         └────────────────────────────────────┴─ atau webhook / polling
 ```
 
-## Alur
+**Live:** https://vscan.boundless.my.id · Deploy: Vercel (auto dari `main`) · DB: Neon Postgres
 
-1. **Daftarkan proyek**: buka `/register` → isi nama proyek + **URL tujuan** (+ token rahasia opsional)
-   → VScan membuat **kode pairing 6 karakter** (berlaku 12 jam) → tampilkan di layar kasir.
-2. **HP scan**: buka VScan di HP → ketik kode → arahkan kamera ke barcode.
-3. **VScan terima**: barcode disimpan (`pending_scans`) lalu **dikirim ke URL tujuan** via
-   `POST { code, scanId, barcode, token, timestamp }`.
-4. **Proyek terima**: URL tujuan menerima barcode (atau polling `GET /api/poll?code=…&token=…`
-   bila tidak memakai webhook) → diproses sesuai kebutuhan proyek.
+---
 
-> HP hanya butuh kode pairing — tidak tahu proyek apa yang menerima. Satu VScan melayani
-> banyak proyek sekaligus (banyak sesi).
+## 🚀 Cara pakai singkat
 
-## API
+### 1. Daftarkan proyek/POS (sekali, dari komputer)
+- Buka **vscan.boundless.my.id** → klik **"Daftarkan Proyek / POS"**
+- Isi **2 field**: nama proyek (mis. "Apotek Sehat") + URL tujuan (opsional)
+- VScan membuat **kode pairing 6 karakter** (berlaku **12 jam**)
 
-| Endpoint | Auth | Deskripsi |
-|---|---|---|
-| `POST /api/session` | — | Daftarkan proyek. Body `{ label, webhookUrl?, webhookToken? }` → `201 { id, code, expiresAt }` |
-| `POST /api/check` | — | Validasi kode HP. Body `{ code }` → `{ valid, reason: invalid\|not_found\|inactive\|expired }` |
-| `POST /api/push` | kode pairing | Terima scan HP. Body `{ code, barcode }` → simpan + kirim webhook → `201 { ok, id, barcode }` |
-| `GET /api/poll` | `?code=` + `&token=` | Ambil barcode (claim-on-read, tanpa webhook). Response `{ scans: [{ id, barcode }] }` |
+### 2. Pasang Scanner Agent di komputer kasir (sekali, ~1 menit)
+```bash
+# Linux / macOS
+curl -sSL https://raw.githubusercontent.com/syamsulsariphidayat7/vscan/main/scanner-agent/install.sh | bash
+```
+```bat
+:: Windows (Command Prompt)
+curl -sSL https://raw.githubusercontent.com/syamsulsariphidayat7/vscan/main/scanner-agent/install.ps1 -o %TEMP%\vscan-install.ps1 && powershell -ExecutionPolicy Bypass -File %TEMP%\vscan-install.ps1
+```
+Installer otomatis: install Python + paket sistem → download agent ke
+`~/vscan-agent` (Linux) / `%USERPROFILE%\vscan-agent` (Windows) → minta kode
+pairing → tulis `agent.env` → (opsional) auto-start → langsung jalan.
+Panduan lengkap: [`scanner-agent/README.md`](scanner-agent/README.md).
 
-**Kontrak webhook** (`POST webhookUrl`): `{ code, scanId, barcode, token, timestamp }` — proyek
-memverifikasi `token` (bila diisi) lalu memproses `barcode`. Sesi tanpa `webhookUrl` → proyek
-memakai `/api/poll` (wajib sertakan `token` bila sesi memakainya).
+### 3. Setiap hari
+- **Komputer kasir**: buka POS, kursor di kolom pencarian (agent sudah jalan di background)
+- **HP**: buka vscan.boundless.my.id → tombol **Scan** → pilih proyek dari daftar (sekali per shift)
+- **Scan** barcode → **detik itu juga** barcode diketik + Enter di POS → barang masuk keranjang
 
-## Menjalankan Lokal
+> Kode pairing kadaluarsa 12 jam → buat kode baru di halaman depan, ganti
+> `VSCAN_CODE` di `agent.env`, restart agent.
 
-Prasyarat: Node ≥ 20, pnpm, PostgreSQL lokal.
+---
+
+## 📄 Halaman
+
+| Halaman | Fungsi |
+|---|---|
+| `/` (landing HP) | Tombol **Scan** besar (lanjut kode terakhir / scan QR pairing) + daftar **"Proyek terhubung"** (klik = pair, auto-refresh 15 dtk) + tombol daftarkan proyek |
+| `/register` | Daftar sesi pairing aktif — salin kode, **perpanjang / tutup** (hanya sesi milik browser ini) |
+| `/scan` | Kamera scanner + log + status sesi + senter + wake lock |
+
+## 🔌 API
+
+| Endpoint | Deskripsi |
+|---|---|
+| `POST /api/session` | Daftarkan proyek. Body `{ label, webhookUrl?, webhookToken? }` → `201 { id, code, expiresAt }` |
+| `GET /api/session` | List **semua sesi aktif** (publik): `{ sessions: [{ id, code, label, status, expiresAt, owned }] }` — info sensitif (webhookUrl/token) tidak diekspos |
+| `PATCH /api/session` | Kelola sesi milik sendiri. Body `{ id, action: "extend"\|"close" }` |
+| `POST /api/check` | Validasi kode HP. Body `{ code }` → `{ valid, reason }` |
+| `POST /api/push` | Terima scan HP. Body `{ code, barcode }` → simpan + kirim webhook → `201` |
+| `GET /api/poll` | Ambil barcode (claim-on-read). `?code=` (+ `&token=` bila sesi memakai token) → `{ scans: [{ id, barcode }] }` |
+
+**Webhook** (bila `webhookUrl` diisi): VScan kirim `POST { code, scanId, barcode, token, timestamp }`
+ke URL tujuan; gagal → barcode tetap tersimpan dan bisa diambil via `/api/poll`.
+Keamanan: URL `localhost`/IP privat ditolak (anti-SSRF), rate limit 20 sesi/jam/IP,
+antrean maks 200 barcode/sesi.
+
+---
+
+## 💻 Menjalankan lokal
 
 ```bash
 pnpm install
-createdb vscan                              # atau pakai DB lain, sesuaikan .env
-cp .env.example .env                        # set DATABASE_URL
-pnpm db:migrate                             # prisma migrate dev (buat tabel)
-pnpm dev                                    # http://localhost:3000
+createdb vscan                       # Prasyarat: Node ≥20, pnpm, PostgreSQL
+cp .env.example .env                 # set DATABASE_URL
+pnpm db:migrate                      # prisma migrate dev
+pnpm dev                             # http://localhost:3000
 ```
 
-Uji cepat:
+## 🚢 Deploy (Vercel + Neon)
 
-```bash
-# Daftarkan proyek (URL tujuan = receiver kamu)
-curl -X POST localhost:3000/api/session -H 'Content-Type: application/json' \
-  -d '{"label":"Kasir 1","webhookUrl":"http://localhost:3999/hook","webhookToken":"rahasia"}'
+1. Push ke `main` → Vercel auto-deploy.
+2. **DB**: buat project **Neon** (console.neon.tech) → salin string **pooled**.
+3. Vercel → project `vscan` → Settings → Environment Variables → `DATABASE_URL` = string pooled.
+4. Migrasi sekali dari lokal (pakai string **non-pooled**):
+   ```bash
+   DATABASE_URL="postgresql://user:pass@ep-xxx...neon.tech/vscan?sslmode=require" pnpm db:deploy
+   ```
+5. Custom domain: Vercel → project `vscan` → **Domains** → tambah `vscan.boundless.my.id` (arahkan DNS/CNAME).
 
-# Scan dari HP
-curl -X POST localhost:3000/api/push -H 'Content-Type: application/json' \
-  -d '{"code":"<KODE>","barcode":"8991111111111"}'
-
-# Tanpa webhook → polling
-curl "localhost:3000/api/poll?code=<KODE>&token=rahasia"
-```
-
-## Env Variables
-
-| Variable | Wajib | Deskripsi |
-|---|---|---|
-| `DATABASE_URL` | ✅ | Postgres VScan sendiri. Lokal: `postgresql://postgres@localhost:5432/vscan` |
-
-## Deploy: GitHub → Vercel + Neon (Panduan Lengkap)
-
-> VScan butuh **database Postgres** (Neon). Tanpa `DATABASE_URL` yang benar, halaman `/`
-> dan `/register` tetap tampil tapi semua operasi DB gagal. Ikuti langkah berikut sekali saja.
-
-### A. Buat project Neon (sekali, ~3 menit)
-
-1. Buka **console.neon.tech** → login (Google/GitHub).
-2. **Create a project** → beri nama (mis. `vscan`) → pilih region terdekat (mis. Singapore)
-   → **Create Project**.
-3. Setelah jadi, buka **Connection Details** → salin **dua** string koneksi:
-   - **Pooled** (untuk runtime Vercel): `postgresql://user:pass@ep-xxx-pooler.us-east-2.aws.neon.tech/vscan?sslmode=require`
-   - **Non-pooled** (untuk migrasi): `postgresql://user:pass@ep-xxx.us-east-2.aws.neon.tech/vscan?sslmode=require`
-
-### B. Set `DATABASE_URL` di Vercel
-
-1. Buka **vercel.com** → project **vscan** → tab **Settings → Environment Variables**.
-2. Tambah: `DATABASE_URL` = string **pooled** dari langkah A.3 → Save.
-3. (Opsional) buka tab **Deployments** → menu `...` pada deployment terakhir → **Redeploy**
-   supaya env baru langsung terpakai.
-
-### C. Jalankan migrasi ke Neon (sekali)
-
-```bash
-# Dari lokal — pakai string NON-POOLED supaya prisma bisa bikin/migrasi tabel.
-DATABASE_URL="postgresql://user:pass@ep-xxx.us-east-2.aws.neon.tech/vscan?sslmode=require" \
-  pnpm db:deploy
-```
-
-> Verifikasi: `npx prisma studio` atau psql → tabel `ScanSession` + `PendingScan` ada.
-
-### D. Push & deploy
-
-```bash
-git add -A && git commit -m "feat: ..." && git push origin main
-```
-
-Push ke `main` → Vercel auto-deploy. Buka `https://vscan.boundless.my.id` → buat kode
-pairing pertama di halaman depan (Daftarkan Proyek / POS).
-
-### Troubleshoot
-
-| Gejala | Penyebab / Solusi |
-|---|---|
-| Halaman kosong/500 di produksi | `DATABASE_URL` belum di-set atau salah di Vercel |
-| `migrate deploy` gagal | Pakai URL **non-pooled**, bukan pooled |
-| Scan tidak masuk ke proyek | Pastikan webhook URL publik (bukan localhost) — SSRF diblokir |
-| Sesi hilang setelah 12 jam | Normal — kode pairing kedaluwarsa, buat ulang di `/register` |
-
-> PWA: buka situs sekali lalu *Add to Home Screen* — VScan bisa dipakai seperti aplikasi.
-
-## Struktur
+## 🗂 Struktur
 
 ```
 vscan/
-├── prisma/schema.prisma      # ScanSession + PendingScan (DB mandiri)
+├── prisma/schema.prisma        # ScanSession + PendingScan
+├── scanner-agent/              # Aplikasi komputer kasir (polling + ketik ke OS)
+│   ├── agent.py                #   program utama
+│   ├── install.sh / install.ps1#   installer otomatis (curl one-liner)
+│   └── start-agent.bat/.sh     #   launcher sekali-klik
 ├── src/
 │   ├── app/
-│   │   ├── page.tsx          # Landing HP: input kode pairing
-│   │   ├── register/page.tsx # Daftarkan proyek (label + URL tujuan + token) → kode
-│   │   ├── scan/page.tsx     # Scanner kamera + log + status sesi
-│   │   ├── api/
-│   │   │   ├── session/      # POST — daftar proyek
-│   │   │   ├── check/        # POST — validasi kode HP
-│   │   │   ├── push/         # POST — terima scan + kirim webhook
-│   │   │   └── poll/         # GET  — ambil barcode (fallback)
-│   │   ├── layout.tsx / manifest.ts / globals.css
+│   │   ├── page.tsx            # Landing HP: Scan + daftar proyek + modal daftar
+│   │   ├── register/page.tsx   # Kelola sesi pairing
+│   │   ├── scan/page.tsx       # Scanner kamera
+│   │   └── api/{session,check,push,poll}/
+│   ├── components/register-modal.tsx
 │   ├── hooks/use-barcode-detector.ts
-│   └── lib/                  # db.ts (Prisma), vscan.ts (inti), api.ts (klien)
-├── public/sw.js / icon.svg
-└── .env.example
+│   └── lib/{db,vscan,api}.ts
+└── public/sw.js                # PWA (network-first untuk navigasi)
 ```
 
-## Stack
+## 🧰 Stack
 
 Next.js 16 (App Router) · Prisma 6 · PostgreSQL (Neon) · Tailwind v4 · TypeScript ·
-BarcodeDetector API (native) · PWA (service worker) · Vercel · lucide-react · sonner
+BarcodeDetector API · PWA · Vercel · lucide-react · sonner
