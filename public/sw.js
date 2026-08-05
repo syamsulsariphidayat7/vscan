@@ -1,6 +1,8 @@
 /* VScan — service worker sederhana: cache shell agar PWA bisa di-install &
-   dibuka offline. Aset di-precache saat install, disajikan cache-first. */
-const CACHE = "vscan-shell-v1";
+   dibuka offline. Aset di-precache saat install, disajikan cache-first;
+   navigasi memakai network-first agar update HTML selalu ter-deliver
+   (cache lama otomatis dihapus saat nama CACHE berubah). */
+const CACHE = "vscan-shell-v2";
 const SHELL = ["/", "/scan", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", (event) => {
@@ -36,6 +38,23 @@ self.addEventListener("fetch", (event) => {
 
   if (!isNavigation && !isLocalAsset) return;
 
+  if (isNavigation) {
+    // Network-first: selalu ambil HTML terbaru dari server; cache hanya
+    // fallback saat offline. Mencegah user terjebak versi halaman lama.
+    event.respondWith(
+      fetch(request)
+        .then((res) => {
+          if (res.ok) {
+            const clone = res.clone();
+            caches.open(CACHE).then((cache) => cache.put(request, clone));
+          }
+          return res;
+        })
+        .catch(() => caches.match(request).then((c) => c || caches.match("/")))
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached;
@@ -47,10 +66,7 @@ self.addEventListener("fetch", (event) => {
           }
           return res;
         })
-        .catch(() => {
-          if (isNavigation) return caches.match("/");
-          return new Response("Offline", { status: 503 });
-        });
+        .catch(() => new Response("Offline", { status: 503 }));
     })
   );
 });

@@ -12,7 +12,7 @@ export function PwaRegister() {
     ) {
       return;
     }
-    navigator.serviceWorker.register("/sw.js").catch(() => {
+    navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).catch(() => {
       // SW gagal registrasi — aplikasi tetap jalan tanpa offline shell.
     });
   }, []);
