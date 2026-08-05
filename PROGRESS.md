@@ -13,6 +13,22 @@ scanner USB, tanpa mengubah kode POS), atau via webhook/polling.
 
 ## Perubahan Terbaru
 
+### ⚡ Long-poll di /api/poll — barcode terdeteksi ~0,3 dtk (2026-08-05)
+- **Masalah**: delay scan→POS ~2–4,5 dtk. Fungsi Vercel Hobby di-pin ke
+  `iad1` (US) & tidak bisa ganti region (fitur Pro), Neon di Singapura →
+  tiap request ~1,6 dtk (2× lintas Pasifik). Siklus agent lama = poll
+  1,6 dtk + sleep 1 dtk = barcode baru ketahuan paling cepat 2,6 dtk.
+- **Fix**: `/api/poll?longpoll=1` — server menahan koneksi 6 dtk & cek DB
+  tiap 250 ms; membalas seketika begitu barcode masuk (batas fungsi Hobby
+  10 dtk → hold 6 dtk aman). Agent memakai long-poll: kosong → jeda 0,3 dtk
+  (bukan 1 dtk); berhasil → jeda interval normal. Tanpa param → perilaku
+  lama (balas seketika), kompatibel mundur.
+- **Hasil**: deteksi barcode 2,6 dtk → **~0,3 dtk**; total dirasakan turun ke
+  ~1,8–2 dtk (dominasi push network 1,5 dtk yang tak bisa dihilangkan tanpa
+  region Pro / self-host dekat kasir). Beban request turun ~85%
+  (1 koneksi tahan ~6 dtk vs request tiap detik).
+- **Update kasir**: jalankan ulang curl install (idempoten).
+
 ### 🔓 Fix: 403 Cloudflare — agent pakai User-Agent browser (2026-08-05)
 - **Gejala**: agent terus log "Polling ditolak (403)" meski sesi aktif &
   `/api/poll` tidak punya jalur 403 lagi (kode lama sudah dihapus).

@@ -33,7 +33,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime
 
-POLL_TIMEOUT = 10  # detik, timeout HTTP tiap polling
+POLL_TIMEOUT = 15  # detik, timeout HTTP tiap polling (long-poll menahan ~6s)
 
 
 def load_env_file(path: str) -> None:
@@ -188,10 +188,14 @@ _BROWSER_UA = (
 )
 
 
-def fetch_scans(url: str, code: str) -> list[dict]:
+def fetch_scans(url: str, code: str, longpoll: bool = True) -> list[dict]:
     """Ambil barcode baru dari VScan (claim-on-read di server, jadi aman
-    di-poll berulang tanpa duplikat)."""
-    params = urllib.parse.urlencode({"code": code})
+    di-poll berulang tanpa duplikat).
+
+    longpoll=True: server menahan koneksi ~6 detik dan langsung membalas
+    begitu ada barcode baru — barcode terdeteksi hampir seketika tanpa
+    menunggu siklus polling berikutnya."""
+    params = urllib.parse.urlencode({"code": code, "longpoll": "1" if longpoll else "0"})
     endpoint = f"{url.rstrip('/')}/api/poll?{params}"
     req = urllib.request.Request(
         endpoint,
@@ -281,13 +285,15 @@ def main() -> None:
     empty_streak = 0
 
     while True:
-        scans = fetch_scans(args.url, args.code)
+        # Long-poll: saat kosong server menahan koneksi ~6 detik, jadi jeda
+        # pendek saja (barcode baru terdeteksi ~0,3 detik setelah di-push).
+        scans = fetch_scans(args.url, args.code, longpoll=True)
         if not scans:
             empty_streak += 1
             # Beri tahu sekali saja kalau sesi tidak ditemukan (bukan spam tiap detik).
             if empty_streak == 3:
                 log("ℹ️  Belum ada barcode baru / sesi tidak aktif — menunggu…")
-            time.sleep(args.interval)
+            time.sleep(0.3)
             continue
 
         empty_streak = 0
@@ -309,7 +315,7 @@ def main() -> None:
                     known.discard(scan_id)  # biar bisa dicoba lagi
 
         save_known(args.state, known)
-        time.sleep(args.interval)
+        time.sleep(args.interval)  # jeda antar-gelombang scan
 
 
 if __name__ == "__main__":

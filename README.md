@@ -47,6 +47,10 @@ Panduan lengkap: [`scanner-agent/README.md`](scanner-agent/README.md).
 > Kode pairing kadaluarsa 12 jam → buat kode baru di halaman depan, ganti
 > `VSCAN_CODE` di `agent.env`, restart agent.
 
+> ⚡ **Latensi**: versi agent terbaru memakai **long-polling** — barcode
+> terdeteksi ~0,3 dtk setelah di-scan (bukan menunggu siklus polling).
+> Pastikan agent versi terbaru (jalankan ulang curl install di bawah).
+
 ### 🔄 Update agent ke versi terbaru
 Jalankan ulang perintah curl install yang sama (idempoten — file agent ditimpa
 versi terbaru, **`agent.env` kode pairing tetap dipertahankan**). Versi terbaru
@@ -72,7 +76,7 @@ mengirim User-Agent browser, sehingga tidak lagi kena blokir 403 Cloudflare
 | `PATCH /api/session` | Kelola sesi milik sendiri. Body `{ id, action: "extend"\|"close" }` |
 | `POST /api/check` | Validasi kode HP. Body `{ code }` → `{ valid, reason }` |
 | `POST /api/push` | Terima scan HP. Body `{ code, barcode }` → simpan + kirim webhook → `201` |
-| `GET /api/poll` | Ambil barcode (claim-on-read). `?code=` → `{ scans: [{ id, barcode }] }` — token tidak diperlukan. **Auto-extend**: selama ada yang aktif polling, sesi diperpanjang +12 jam bila tersisa < 6 jam (sesi ditutup tidak dihidupkan) |
+| `GET /api/poll` | Ambil barcode (claim-on-read). `?code=` → `{ scans: [{ id, barcode }] }` — token tidak diperlukan. `?longpoll=1` → server menahan koneksi ~6 dtk & balas seketika saat barcode masuk (dipakai Scanner Agent). **Auto-extend**: selama ada yang aktif polling, sesi diperpanjang +12 jam bila tersisa < 6 jam (sesi ditutup tidak dihidupkan) |
 | `GET /api/agent/download` | (Opsional) Unduh **Scanner Agent** sebagai ZIP — cara utama install adalah **curl one-liner** di bagian Scanner Agent halaman `/` & `/register` |
 
 `PATCH /api/session` — `close` (hapus dari daftar) boleh dari browser mana pun;
