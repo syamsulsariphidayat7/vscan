@@ -6,10 +6,11 @@
 (POS apotek, toko, kafe, dll.) menerima hasil scan **tanpa mengubah kode proyek** — cukup
 **mendaftarkan URL tujuan** (webhook) atau polling. Server VScan punya **database sendiri**
 (Neon di produksi, Postgres lokal di dev). Production live di Vercel: **https://vscan-alpha.vercel.app**
-(sementara pakai domain default; env `DATABASE_URL` Neon **belum di-set** — menunggu user membuat
-Neon + migrasi). **Menunggu user**: (1) buat project Neon → set `DATABASE_URL` di Vercel, (2)
-`pnpm db:deploy` ke Neon (migrasi terbaru `add_owner_id` juga ikut), (3) buka `/register` untuk
-kode pairing pertama.
+(sementara pakai domain default). **DB PRODUKSI SUDAH LIVE**: Neon free tier (PostgreSQL 17,
+region Singapore) — `DATABASE_URL` pooled sudah di-set di Vercel (production, type Sensitive),
+migrasi `init` + `add_owner_id` sudah di-deploy, dan domain utama sudah dialiaskan ke deployment
+dengan env tersebut. E2E produksi terverifikasi: register proyek → `201` + kode, list tampil
+(`owned` benar), push barcode → `201`, data uji dibersihkan.
 
 ## Riwayat Fase
 
