@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import {
-  lookupActiveSession,
-  deliverWebhook,
-  MAX_PENDING_PER_SESSION,
-} from "@/lib/vscan";
+import { lookupActiveSession, MAX_PENDING_PER_SESSION } from "@/lib/vscan";
 
 export const dynamic = "force-dynamic";
 
@@ -12,9 +8,8 @@ export const dynamic = "force-dynamic";
  * Terima scan dari HP (client).
  * POST /api/push  Body: { code, barcode }
  *
- * Alur: validasi sesi → simpan PendingScan → kirim ke URL tujuan proyek
- * (webhook, bila didaftarkan) → tandai delivered/failed. Bila sesi tanpa
- * webhook, proyek mengambil via GET /api/poll.
+ * Alur: validasi sesi → simpan PendingScan. Scanner Agent / proyek mengambil
+ * barcode via GET /api/poll (claim-on-read).
  */
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
@@ -58,24 +53,6 @@ export async function POST(req: Request) {
   const scan = await prisma.pendingScan.create({
     data: { sessionId: session.id, barcode },
   });
-
-  // Kirim ke URL tujuan proyek (bila ada) — hasilnya dicatat.
-  const delivery = await deliverWebhook(session, scan);
-  if (delivery.delivered) {
-    await prisma.pendingScan.update({
-      where: { id: scan.id },
-      data: { status: "delivered", attempts: { increment: 1 }, deliveredAt: new Date() },
-    });
-  } else if (!delivery.skipped) {
-    await prisma.pendingScan.update({
-      where: { id: scan.id },
-      data: {
-        status: "failed",
-        attempts: { increment: 1 },
-        lastError: delivery.error ?? "webhook gagal",
-      },
-    });
-  }
 
   return NextResponse.json(
     { ok: true, id: scan.id, barcode: scan.barcode },

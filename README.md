@@ -3,12 +3,12 @@
 VScan adalah layanan mandiri yang mengubah **HP menjadi scanner barcode** dan
 mengirim hasilnya ke **proyek/POS apa pun** — tanpa mengubah kode proyek.
 Barcode masuk otomatis lewat **Scanner Agent** di komputer kasir (ketik ke OS
-seperti scanner USB), atau via webhook/polling.
+seperti scanner USB) atau via polling `/api/poll`.
 
 ```
 HP (kamera) ──scan──► VScan (vscan.boundless.my.id) ──► Komputer kasir
                          │  DB Neon: sesi + antrean barcode   ├─ Scanner Agent (ketik ke POS)
-                         └────────────────────────────────────┴─ atau webhook / polling
+                         └────────────────────────────────────┴─ atau polling /api/poll
 ```
 
 **Live:** https://vscan.boundless.my.id · Deploy: Vercel (auto dari `main`) · DB: Neon Postgres
@@ -22,9 +22,8 @@ HP (kamera) ──scan──► VScan (vscan.boundless.my.id) ──► Komputer
 - Isi **1 field**: nama proyek (mis. "Apotek Sehat")
 - VScan membuat **kode pairing 6 karakter** (berlaku **12 jam**)
 
-> URL tujuan tidak lagi ditanyakan di form — barcode diambil komputer kasir
-> lewat polling (`/api/poll`). Webhook tetap didukung via API untuk proyek yang
-> butuh menerima POST langsung (lihat bagian API).
+> Barcode diambil komputer kasir lewat polling (`/api/poll`) — tidak ada URL
+> tujuan/webhook.
 
 ### 2. Pasang Scanner Agent di komputer kasir (sekali, ~1 menit)
 ```bash
@@ -62,20 +61,18 @@ Panduan lengkap: [`scanner-agent/README.md`](scanner-agent/README.md).
 
 | Endpoint | Deskripsi |
 |---|---|
-| `POST /api/session` | Daftarkan proyek. Body `{ label, webhookUrl?, webhookToken? }` → `201 { id, code, expiresAt }` |
-| `GET /api/session` | List **semua sesi aktif** (publik): `{ sessions: [{ id, code, label, status, expiresAt, owned }] }` — info sensitif (webhookUrl/token) tidak diekspos |
+| `POST /api/session` | Daftarkan proyek. Body `{ label }` → `201 { id, code, label, expiresAt }` |
+| `GET /api/session` | List **semua sesi aktif** (publik): `{ sessions: [{ id, code, label, status, expiresAt, owned }] }` |
 | `PATCH /api/session` | Kelola sesi milik sendiri. Body `{ id, action: "extend"\|"close" }` |
 | `POST /api/check` | Validasi kode HP. Body `{ code }` → `{ valid, reason }` |
 | `POST /api/push` | Terima scan HP. Body `{ code, barcode }` → simpan + kirim webhook → `201` |
 | `GET /api/poll` | Ambil barcode (claim-on-read). `?code=` → `{ scans: [{ id, barcode }] }` — token tidak diperlukan. **Auto-extend**: selama ada yang aktif polling, sesi diperpanjang +12 jam bila tersisa < 6 jam (sesi ditutup tidak dihidupkan) |
 | `GET /api/agent/download` | (Opsional) Unduh **Scanner Agent** sebagai ZIP — cara utama install adalah **curl one-liner** di bagian Scanner Agent halaman `/` & `/register` |
 
-**Webhook** (bila `webhookUrl` diisi): VScan kirim `POST { code, scanId, barcode, token, timestamp }`
-ke URL tujuan; gagal → barcode tetap tersimpan dan bisa diambil via `/api/poll`.
 `PATCH /api/session` — `close` (hapus dari daftar) boleh dari browser mana pun;
 `extend` (perpanjang) hanya sesi milik browser ini.
-Keamanan: URL `localhost`/IP privat ditolak (anti-SSRF), rate limit 20 sesi/jam/IP,
-antrean maks 200 barcode/sesi.
+Keamanan: rate limit 20 sesi/jam/IP, antrean maks 200 barcode/sesi,
+sesi auto-extend selama ada yang aktif polling.
 
 ---
 

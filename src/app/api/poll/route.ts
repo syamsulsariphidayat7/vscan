@@ -27,10 +27,8 @@ async function maybeAutoExtend(session: { id: string; expiresAt: Date }) {
  * GET /api/poll?code=KODE
  *  - code — kode pairing
  *
- * Catatan: webhookToken TIDAK diperlukan di sini. Token itu hanya untuk
- * verifikasi webhook di sisi proyek; kode pairing sendiri sudah tampil
- * publik, jadi membuka poll hanya dgn kode konsisten dgn model keamanan
- * (claim-on-read mencegah duplikat).
+ * Catatan: kode pairing sudah tampil publik, jadi membuka poll hanya dgn
+ * kode konsisten dgn model keamanan (claim-on-read mencegah duplikat).
  *
  * Auto-extend: selama ada yang aktif polling (Scanner Agent), sesi dijaga
  * tetap hidup — diperpanjang +12 jam bila tersisa < 6 jam. Sesi yang sudah
@@ -57,9 +55,8 @@ export async function GET(req: Request) {
   // Selama ada yang aktif polling (agent kasir), sesi dijaga tetap hidup.
   await maybeAutoExtend(session);
 
-  // Claim pending ATAU failed (webhook sempat gagal) — biar tidak ada scan
-  // yang "nyangkut" selamanya ketika URL tujuan down.
-  const CLAIMABLE: ("pending" | "failed")[] = ["pending", "failed"];
+  // Claim barcode pending (belum diambil siapa pun).
+  const CLAIMABLE: ("pending")[] = ["pending"];
   const scans = await prisma.$transaction(async (tx) => {
     const pending = await tx.pendingScan.findMany({
       where: { sessionId: session.id, status: { in: CLAIMABLE } },

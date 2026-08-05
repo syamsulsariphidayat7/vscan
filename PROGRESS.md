@@ -13,6 +13,16 @@ scanner USB, tanpa mengubah kode POS), atau via webhook/polling.
 
 ## Perubahan Terbaru
 
+### 🗑️ Webhook dihapus total (2026-08-05)
+- Kolom `webhookUrl` & `webhookToken` **DIDROP** dari `ScanSession` — migrasi
+  `20260805153833_remove_webhook` diterapkan ke lokal & Neon produksi
+  (0 sesi memakainya; diverifikasi kolom hilang).
+- Kode webhook dihapus: `deliverWebhook`, `isSafeWebhookUrl` (anti-SSRF),
+  parameter `webhookUrl`/`webhookToken` di `POST /api/session`,
+  logika delivered/failed di `/api/push`.
+- `/api/poll` kini hanya meng-claim status `pending`. Alur murni:
+  HP scan → `push` (pending) → Scanner Agent/proyek `poll` (claim).
+
 ### 🧹 Simplifikasi UX batch (2026-08-05)
 - **Unduh ZIP diganti curl**: tombol "Download vscan-agent.zip" di `/` & `/register`
   diganti komponen `AgentInstall` (perintah curl one-liner Linux & Windows +

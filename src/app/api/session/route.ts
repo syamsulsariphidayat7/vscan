@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { randomPairingCode, SESSION_TTL_MS, isSafeWebhookUrl } from "@/lib/vscan";
+import { randomPairingCode, SESSION_TTL_MS } from "@/lib/vscan";
 
 export const dynamic = "force-dynamic";
 
@@ -45,27 +45,17 @@ function ownerCookie(ownerId: string | null): string {
  * Daftarkan proyek (POS/kasir apa pun) ke VScan → dapat kode pairing.
  *
  * POST /api/session
- * Body: { label, webhookUrl?, webhookToken? }
- *  - label         — nama proyek/kasir (wajib)
- *  - webhookUrl    — URL tujuan: VScan mengirim barcode ke sini (opsional;
- *                    tanpa ini proyek ambil via GET /api/poll)
- *  - webhookToken  — secret bersama utk verifikasi di sisi proyek (opsional)
+ * Body: { label }
+ *  - label — nama proyek/kasir (wajib)
  *
- * Response 201: { id, code, label, webhookUrl, expiresAt }
- * Sesi aktif 12 jam; buat sesi baru saat kedaluwarsa.
- * Set cookie `vscan_owner` agar sesi bisa dilihat/dikelola di halaman /register.
+ * Response 201: { id, code, label, expiresAt }
+ * Sesi aktif 12 jam (auto-extend selama ada yang polling); buat sesi baru
+ * saat kedaluwarsa. Set cookie `vscan_owner` agar sesi bisa dilihat/dikelola
+ * di halaman /register.
  */
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const label = typeof body.label === "string" ? body.label.trim() : "";
-  const webhookUrl =
-    typeof body.webhookUrl === "string" && body.webhookUrl.trim()
-      ? body.webhookUrl.trim()
-      : null;
-  const webhookToken =
-    typeof body.webhookToken === "string" && body.webhookToken.trim()
-      ? body.webhookToken.trim()
-      : null;
 
   if (!allowSessionCreation(getClientIp(req))) {
     return NextResponse.json(
@@ -86,24 +76,6 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
-  if (webhookUrl && webhookUrl.length > 500) {
-    return NextResponse.json(
-      { error: "URL tujuan terlalu panjang (maks 500 karakter)" },
-      { status: 400 }
-    );
-  }
-  if (webhookUrl && !isSafeWebhookUrl(webhookUrl)) {
-    return NextResponse.json(
-      { error: "URL tujuan tidak diizinkan (localhost / IP privat tidak boleh)" },
-      { status: 400 }
-    );
-  }
-  if (webhookToken && webhookToken.length > 200) {
-    return NextResponse.json(
-      { error: "Token terlalu panjang (maks 200 karakter)" },
-      { status: 400 }
-    );
-  }
 
   // Owner id dipastikan ADA sebelum create: sesi pertama (tanpa cookie) harus
   // tetap masuk daftar milik browser, jadi pakai id yang sama untuk cookie.
@@ -112,8 +84,6 @@ export async function POST(req: Request) {
     data: {
       code: randomPairingCode(),
       label,
-      webhookUrl,
-      webhookToken,
       ownerId,
       expiresAt: new Date(Date.now() + SESSION_TTL_MS),
     },
@@ -124,7 +94,6 @@ export async function POST(req: Request) {
       id: session.id,
       code: session.code,
       label: session.label,
-      webhookUrl: session.webhookUrl,
       expiresAt: session.expiresAt.toISOString(),
     },
     { status: 201, headers: { "Set-Cookie": ownerCookie(ownerId) } }
@@ -139,7 +108,6 @@ export async function POST(req: Request) {
  * Response 200: { sessions: [{ id, code, label, status, expiresAt, owned }] }
  *  - owned: true bila sesi dibuat dari browser ini (cookie vscan_owner) →
  *    halaman /register hanya menampilkan tombol kelola utk sesi owned.
- * Info sensitif (webhookUrl, webhookToken) TIDAK diekspos.
  */
 export async function GET(req: Request) {
   const ownerId = getOwnerId(req);
@@ -228,7 +196,6 @@ export async function PATCH(req: Request) {
       code: updated.code,
       label: updated.label,
       status: updated.status,
-      webhookUrl: updated.webhookUrl,
       expiresAt: updated.expiresAt.toISOString(),
     },
   });

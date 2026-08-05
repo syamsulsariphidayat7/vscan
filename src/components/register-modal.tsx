@@ -15,7 +15,6 @@ import QRCode from "qrcode";
 export interface CreatedSession {
   code: string;
   label: string;
-  webhookUrl: string | null;
   expiresAt: string;
 }
 
@@ -50,8 +49,8 @@ function formatExpiry(iso: string): string {
 }
 
 /**
- * Modal pendaftaran proyek (POS/kasir): form label + URL tujuan + token →
- * setelah dibuat, tampilkan kode pairing besar + QR tanpa pindah halaman.
+ * Modal pendaftaran proyek (POS/kasir): form nama proyek → setelah dibuat,
+ * tampilkan kode pairing besar + QR tanpa pindah halaman.
  * Dipakai bersama oleh landing `/` dan halaman `/register`.
  */
 export function RegisterModal({

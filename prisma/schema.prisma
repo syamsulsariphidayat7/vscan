@@ -2,8 +2,8 @@
 //
 // VScan punya database sendiri (Neon Postgres di produksi). HP (client) hanya
 // mengirim barcode dengan kode pairing; proyek mana pun (POS apotek, dll.)
-// "mendaftarkan URL" dan menerima hasil scan — tanpa perlu mengubah kode
-// proyek untuk urusan pairing.
+// mendaftar dan menerima hasil scan via polling / Scanner Agent — tanpa perlu
+// mengubah kode proyek untuk urusan pairing.
 
 generator client {
   provider = "prisma-client-js"
@@ -14,8 +14,8 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// Satu "saluran" pairing: proyek mendaftar (label + URL tujuan) → mendapat
-/// kode 6 karakter yang diketik HP. Berlaku 12 jam.
+/// Satu "saluran" pairing: proyek mendaftar (label) → mendapat kode 6 karakter
+/// yang diketik HP. Berlaku 12 jam (auto-extend selama ada yang polling).
 model ScanSession {
   id           String        @id @default(cuid())
   code         String        @unique
@@ -23,11 +23,6 @@ model ScanSession {
   ownerId      String?
   /// Nama proyek / kasir / POS (mis. "Kasir 1 - Apotek Sehat")
   label        String
-  /// URL tujuan — VScan mengirim barcode ke sini (webhook). Opsional; tanpa
-  /// ini proyek bisa mengambil via GET /api/poll.
-  webhookUrl   String?
-  /// Secret bersama untuk verifikasi di sisi proyek (opsional).
-  webhookToken String?
   status       String        @default("active") // active | closed
   expiresAt    DateTime
   createdAt    DateTime      @default(now())
