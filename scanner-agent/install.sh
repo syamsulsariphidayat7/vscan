@@ -75,7 +75,7 @@ echo "  ✅ Python: $($PYTHON --version)"
 if [[ "$(uname -s)" == "Linux" ]]; then
     echo "[2/6] Menginstall paket sistem pyautogui (scrot, xdotool, tk) ..."
     if command -v apt-get >/dev/null 2>&1; then
-        sudo apt-get update -qq && sudo apt-get install -y -qq scrot xdotool python3-tk python3-venv
+        sudo apt-get update -qq && sudo apt-get install -y -qq scrot xdotool python3-tk python3-venv python3-xlib
     elif command -v dnf >/dev/null 2>&1; then
         sudo dnf install -y scrot xdotool python3-tkinter
     elif command -v pacman >/dev/null 2>&1; then
