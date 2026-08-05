@@ -17,36 +17,49 @@
 | `install-autostart-linux.sh` | Auto-start Linux (jalankan sekali) |
 | `requirements.txt` | Dependensi Python (`pyautogui`) |
 
-## Langkah 1 — Konfigurasi (sekali)
+## ⚡ Cara TERCEPAT — install via curl (auto semua)
+
+### 🐧 Linux / macOS
+```bash
+curl -sSL https://raw.githubusercontent.com/syamsulsariphidayat7/vscan/main/scanner-agent/install.sh | bash
+```
+Installer otomatis: install curl & Python & paket sistem (scrot, xdotool, tk) →
+download agent ke `~/vscan-agent` → buat virtualenv + pyautogui → minta kode
+pairing → (opsional) auto-start → langsung jalankan.
+
+### 🪟 Windows
+```bat
+curl -sSL https://raw.githubusercontent.com/syamsulsariphidayat7/vscan/main/scanner-agent/install.ps1 -o %TEMP%\vscan-install.ps1 && powershell -ExecutionPolicy Bypass -File %TEMP%\vscan-install.ps1
+```
+Installer otomatis: cek Python (auto-install via winget bila belum ada) → download
+agent ke `%USERPROFILE%\vscan-agent` → virtualenv + pyautogui → kode pairing →
+(opsional) auto-start → langsung jalankan.
+
+> Kode pairing didapat dari tombol **"Daftarkan Proyek / POS"** di vscan.boundless.my.id.
+> Satu kode berlaku 12 jam; bila kadaluarsa buat kode baru lalu ubah `VSCAN_CODE` di `agent.env`.
+
+## Cara manual (tanpa curl)
+
+### Langkah 1 — Konfigurasi (sekali)
 
 1. Salin `agent.env.example` menjadi **`agent.env`** (di folder yang sama).
 2. Buka `agent.env` dengan Notepad/editor, isi kode pairing:
    ```
    VSCAN_CODE=ZE7962
    ```
-   (Kode dari tombol **"Daftarkan Proyek / POS"** di vscan.boundless.my.id.)
 
-## Langkah 2 — Install (sekali)
+### Langkah 2 — Install (sekali)
 
-### 🪟 Windows
-1. Install Python 3.10+ dari https://python.org/downloads — **centang "Add python.exe to PATH"**.
-2. Double-click **`start-agent.bat`** — dependensi di-install otomatis, lalu agent berjalan.
+**🪟 Windows**: Install Python 3.10+ dari https://python.org/downloads (centang
+"Add python.exe to PATH"), lalu double-click **`start-agent.bat`**.
 
-### 🐧 Linux
-```bash
-sudo apt install -y python3-pip scrot xdotool python3-tk
-./start-agent.sh        # install dependensi + jalankan
-```
+**🐧 Linux**: `sudo apt install -y python3-pip scrot xdotool python3-tk`, lalu
+`./start-agent.sh`.
 
-## Langkah 3 — Auto-start saat boot (opsional, disarankan)
-
-Agar kasir tidak perlu membuka apa pun saat nyalakan komputer:
+### Langkah 3 — Auto-start saat boot (opsional, disarankan)
 
 - **Windows**: double-click **`install-autostart-windows.bat`** (sekali saja).
 - **Linux**: jalankan `./install-autostart-linux.sh` (sekali saja).
-
-Setelah itu agent otomatis berjalan setiap login. 💡 Verifikasi dulu sekali dengan
-`start-agent` manual supaya yakin kode pairing sudah benar.
 
 ## Uji dulu (disarankan)
 
