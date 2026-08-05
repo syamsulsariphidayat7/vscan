@@ -5,7 +5,9 @@
 **VScan = layanan mandiri** (2026-08-05): HP jadi scanner barcode wireless, dan proyek apa pun
 (POS apotek, toko, kafe, dll.) menerima hasil scan **tanpa mengubah kode proyek** — cukup
 **mendaftarkan URL tujuan** (webhook) atau polling. Server VScan punya **database sendiri**
-(Neon di produksi, Postgres lokal di dev). Production live di Vercel: **https://vscan-alpha.vercel.app**
+(Neon di produksi, Postgres lokal di dev). Production live di Vercel: **https://vscan.boundless.my.id**
+(project Vercel `vscan` — `DATABASE_URL` dari integrasi Vercel Postgres/Neon, di-set 2026-08-05;
+project duplikat `vscan-alpha` sudah DIHAPUS, repo lokal di-re-link ke `vscan`).
 (sementara pakai domain default). **DB PRODUKSI SUDAH LIVE**: Neon free tier (PostgreSQL 17,
 region Singapore) — `DATABASE_URL` pooled sudah di-set di Vercel (production, type Sensitive),
 migrasi `init` + `add_owner_id` sudah di-deploy, dan domain utama sudah dialiaskan ke deployment
@@ -68,9 +70,11 @@ harus hard-refresh manual.
   tepat 2 input, tanpa field token; data uji dibersihkan
 - Validasi: lint bersih, build sukses
 - **Deploy**: commit `e7cb5ea` di-push ke `main` → Vercel auto-deploy → produksi
-  https://vscan-alpha.vercel.app HTTP 200, menampilkan halaman baru (Scan, Daftarkan Proyek,
-  Proyek terhubung). **Menunggu user**: set `DATABASE_URL` Neon di Vercel + `pnpm db:deploy`
-  (migrasi `add_owner_id` belum ada di Neon) — tanpa itu list proyek produksi kosong
+  (saat itu `https://vscan-alpha.vercel.app`, project Vercel waktu itu — kini sudah dialihkan
+  ke project `vscan` + custom domain `vscan.boundless.my.id`) HTTP 200, menampilkan halaman
+  baru (Scan, Daftarkan Proyek, Proyek terhubung). **Menunggu user**: set `DATABASE_URL` Neon
+  di Vercel + `pnpm db:deploy` (migrasi `add_owner_id` belum ada di Neon) — tanpa itu list
+  proyek produksi kosong
 
 ### UX — User-Friendly Pass (2026-08-05) [✔]
 - **Pendaftaran proyek = modal (tidak pindah halaman)**: komponen bersama `RegisterModal`

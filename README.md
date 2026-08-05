@@ -113,7 +113,7 @@ DATABASE_URL="postgresql://user:pass@ep-xxx.us-east-2.aws.neon.tech/vscan?sslmod
 git add -A && git commit -m "feat: ..." && git push origin main
 ```
 
-Push ke `main` → Vercel auto-deploy. Buka `https://vscan-alpha.vercel.app` → buat kode
+Push ke `main` → Vercel auto-deploy. Buka `https://vscan.boundless.my.id` → buat kode
 pairing pertama di halaman depan (Daftarkan Proyek / POS).
 
 ### Troubleshoot
