@@ -38,6 +38,14 @@ harus hard-refresh manual.
 - **Catatan**: dua komputer memakai kode sama → barcode diketik oleh SATU komputer
   (claim-on-read); tiap komputer butuh kode pairing sendiri. Agent harus jalan di
   sesi desktop (bukan SSH tanpa X).
+- **Launcher sekali-klik + auto-start (2026-08-05)**: `agent.py` kini membaca file
+  **`agent.env`** (KEY=VALUE, `#` komentar, dibaca otomatis sebelum args — nilai
+  env OS/CLI tetap menang) sehingga kasir tidak perlu mengetik argumen. Ditambahkan:
+  `start-agent.bat` / `start-agent.sh` (install dependensi otomatis + jalankan),
+  `install-autostart-windows.bat` (shortcut ke Startup folder via PowerShell) dan
+  `install-autostart-linux.sh` (`~/.config/autostart/vscan-agent.desktop`) — agent
+  otomatis berjalan setiap login. Validasi: py_compile, `bash -n`, tes `agent.env`
+  terbaca (Kode TEST1234 + Server custom tampil tanpa argumen).
 
 ## Riwayat Fase
 

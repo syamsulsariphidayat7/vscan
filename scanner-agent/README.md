@@ -5,45 +5,81 @@
 # operasi persis seperti scanner USB fisik — masuk ke kolom autofocus POS apa
 # pun (web maupun desktop) TANPA mengubah kode POS.
 
-## Persiapan sekali (Windows & Linux sama)
-# 1. Install Python 3.10+  → https://python.org/downloads
-#    (Windows: centang "Add python.exe to PATH" saat install)
-# 2. Install dependensi:
-#       pip install -r requirements.txt
-# 3. Catatan Linux: pyautogui butuh beberapa paket sistem:
-#       sudo apt install -y python3-pip scrot xdotool python3-tk
-#    (Windows tidak perlu langkah ini)
+## Isi folder ini
 
-## Jalankan
-#      python agent.py --code KODE_PAIRING
-#
-# Contoh dengan server produksi:
-#      python agent.py --code ZE7962 --url https://vscan.boundless.my.id
-#
-# Contoh dengan server lokal (dev):
-#      python agent.py --code ZE7962 --url http://localhost:3000
+| File | Fungsi |
+|---|---|
+| `agent.py` | Program utama (polling VScan + mengetik ke OS) |
+| `start-agent.bat` | **Launcher sekali-klik Windows** (double-click) |
+| `start-agent.sh` | **Launcher sekali-klik Linux** (`./start-agent.sh`) |
+| `agent.env.example` | Contoh konfigurasi → salin jadi `agent.env` lalu isi kode pairing |
+| `install-autostart-windows.bat` | Auto-start Windows (jalankan sekali) |
+| `install-autostart-linux.sh` | Auto-start Linux (jalankan sekali) |
+| `requirements.txt` | Dependensi Python (`pyautogui`) |
 
-## Cara pakai di kasir
-# 1. Jalankan agent (biarkan terbuka / minimize).
-# 2. Buka aplikasi POS di komputer kasir, arahkan kursor ke kolom autofocus
-#    (mis. kolom pencarian barang di halaman transaksi).
-# 3. Scan barcode dari HP lewat VScan → barcode otomatis diketik + Enter,
-#    persis seperti scanner USB. Kolom autofocus apa pun, proyek apa pun.
+## Langkah 1 — Konfigurasi (sekali)
+
+1. Salin `agent.env.example` menjadi **`agent.env`** (di folder yang sama).
+2. Buka `agent.env` dengan Notepad/editor, isi kode pairing:
+   ```
+   VSCAN_CODE=ZE7962
+   ```
+   (Kode dari tombol **"Daftarkan Proyek / POS"** di vscan.boundless.my.id.)
+
+## Langkah 2 — Install (sekali)
+
+### 🪟 Windows
+1. Install Python 3.10+ dari https://python.org/downloads — **centang "Add python.exe to PATH"**.
+2. Double-click **`start-agent.bat`** — dependensi di-install otomatis, lalu agent berjalan.
+
+### 🐧 Linux
+```bash
+sudo apt install -y python3-pip scrot xdotool python3-tk
+./start-agent.sh        # install dependensi + jalankan
+```
+
+## Langkah 3 — Auto-start saat boot (opsional, disarankan)
+
+Agar kasir tidak perlu membuka apa pun saat nyalakan komputer:
+
+- **Windows**: double-click **`install-autostart-windows.bat`** (sekali saja).
+- **Linux**: jalankan `./install-autostart-linux.sh` (sekali saja).
+
+Setelah itu agent otomatis berjalan setiap login. 💡 Verifikasi dulu sekali dengan
+`start-agent` manual supaya yakin kode pairing sudah benar.
+
+## Uji dulu (disarankan)
+
+```bash
+python agent.py --dry-run        # atau: python agent.py --dry-run --code KODE
+```
+Scan dari HP → muncul `📥 [DRY-RUN] barcode diterima: 8991...` → berhenti (Ctrl+C) → jalankan `start-agent`.
+
+## Cara pakai di kasir (rutinitas harian)
+
+1. Buka aplikasi POS di komputer kasir, kursor di kolom autofocus (mis. kolom pencarian).
+2. HP kasir: buka vscan.boundless.my.id → tombol **Scan** → masukkan kode pairing (tersimpan otomatis).
+3. Scan barcode dari HP → **detik itu juga** barcode diketik + Enter di kolom yang fokus → barang masuk keranjang.
+
+> Agent cukup dijalankan/di-minimize; tidak perlu dilihat terus.
 
 ## Opsi lanjutan
-#   --interval 0.5     Polling lebih cepat (default 1 detik)
-#   --no-enter         Jangan tekan Enter setelah barcode
-#   --dry-run          Mode tes: cetak barcode tanpa mengetik ke OS
-#   --state FILE       File state lokal (default agent-state.json di folder ini)
 
-## Bisa juga via environment variable (tanpa argumen):
-#   VSCAN_URL=http://localhost:3000 VSCAN_CODE=ZE7962 python agent.py
+| Opsi | Fungsi |
+|---|---|
+| `--interval 0.5` | Polling lebih cepat (default 1 detik) |
+| `--no-enter` | Jangan tekan Enter setelah barcode |
+| `--dry-run` | Mode tes: cetak barcode tanpa mengetik ke OS |
+| `--code KODE` | Kode pairing (mengalahkan `agent.env`) |
+| `--url URL` | Server VScan (default https://vscan.boundless.my.id) |
 
 ## Troubleshooting
-# - "pyautogui belum terpasang" → pip install -r requirements.txt
-# - Di Linux tidak mengetik → pastikan paket sistem terpasang (lihat atas) dan
-#   agent dijalankan dari sesi desktop (bukan SSH tanpa X).
-# - Dua komputer memakai kode sama → barcode hanya diketik oleh SATU komputer
-#   (poll claim-on-read di server). Setiap komputer butuh kode pairing sendiri.
-# - Agent tidak bisa mengetik saat jendela POS bukan yang aktif → pastikan
-#   jendela POS di depan (scanner fisik juga begitu).
+
+| Masalah | Solusi |
+|---|---|
+| "Python tidak ditemukan" (Windows) | Install Python & centang "Add to PATH", lalu jalankan ulang |
+| `pyautogui` gagal install di Linux | `sudo apt install -y python3-pip scrot xdotool python3-tk` |
+| Agent jalan tapi tidak mengetik (Linux) | Pastikan dijalankan dari sesi desktop (bukan SSH tanpa X) |
+| Tidak ada barcode masuk | Cek `VSCAN_CODE` di `agent.env` masih benar & sesi aktif (12 jam) |
+| Barcode dobel di 2 komputer | Satu kode pairing = satu komputer kasir; buat kode baru untuk kasir lain |
+| Jendela POS tidak terisi | Pastikan jendela POS adalah yang aktif (scanner fisik juga begitu) |

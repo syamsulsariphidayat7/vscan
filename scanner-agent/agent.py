@@ -25,9 +25,24 @@ import urllib.parse
 import urllib.request
 from datetime import datetime
 
-DEFAULT_URL = os.environ.get("VSCAN_URL", "https://vscan.boundless.my.id")
-DEFAULT_INTERVAL = float(os.environ.get("VSCAN_INTERVAL", "1.0"))
 POLL_TIMEOUT = 10  # detik, timeout HTTP tiap polling
+
+
+def load_env_file(path: str) -> None:
+    """Baca file konfigurasi agent.env (KEY=VALUE, # = komentar) ke env.
+    Nilai env OS / argumen CLI tetap menang (setdefault)."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                key = key.strip()
+                if key:
+                    os.environ.setdefault(key, value.strip())
+    except FileNotFoundError:
+        pass  # agent.env opsional
 
 
 def log(msg: str) -> None:
@@ -97,13 +112,19 @@ def save_known(path: str, known: set[str]) -> None:
 
 
 def main() -> None:
+    # Baca agent.env di folder script SEBELUM args (default-nya).
+    load_env_file(os.path.join(os.path.dirname(os.path.abspath(__file__)), "agent.env"))
+
+    default_url = os.environ.get("VSCAN_URL", "https://vscan.boundless.my.id")
+    default_interval = float(os.environ.get("VSCAN_INTERVAL", "1.0"))
+
     parser = argparse.ArgumentParser(description="VScan Scanner Agent")
     parser.add_argument("--code", default=os.environ.get("VSCAN_CODE", ""),
                         help="Kode pairing VScan (contoh: ZE7962)")
-    parser.add_argument("--url", default=DEFAULT_URL,
-                        help=f"Base URL VScan (default: {DEFAULT_URL})")
-    parser.add_argument("--interval", type=float, default=DEFAULT_INTERVAL,
-                        help=f"Interval polling detik (default: {DEFAULT_INTERVAL})")
+    parser.add_argument("--url", default=default_url,
+                        help=f"Base URL VScan (default: {default_url})")
+    parser.add_argument("--interval", type=float, default=default_interval,
+                        help=f"Interval polling detik (default: {default_interval})")
     parser.add_argument("--enter", action="store_true", default=True,
                         help="Tekan Enter setelah barcode (default: aktif)")
     parser.add_argument("--no-enter", dest="enter", action="store_false",
