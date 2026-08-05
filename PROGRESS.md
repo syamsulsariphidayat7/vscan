@@ -13,6 +13,12 @@ scanner USB, tanpa mengubah kode POS), atau via webhook/polling.
 
 ## Perubahan Terbaru
 
+### ♾️ Auto-extend sesi saat agent polling (2026-08-05)
+- `/api/poll`: selama ada yang aktif polling (Scanner Agent), sesi diperpanjang
+  otomatis +12 jam bila tersisa < 6 jam — sesi tak pernah kadaluarsa selama
+  agent jalan (paling banyak 1 tulis DB per 6 jam). Sesi yang sudah ditutup/
+  dihapus TIDAK dihidupkan ulang.
+
 ### 🗑️ Tombol hapus di list pair landing (2026-08-05)
 - Landing `/`: setiap sesi **milik sendiri** (owned) kini punya tombol hapus
   (ikon tempat sampah) di samping row — konfirmasi → PATCH `close` → hilang

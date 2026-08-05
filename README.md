@@ -67,7 +67,7 @@ Panduan lengkap: [`scanner-agent/README.md`](scanner-agent/README.md).
 | `PATCH /api/session` | Kelola sesi milik sendiri. Body `{ id, action: "extend"\|"close" }` |
 | `POST /api/check` | Validasi kode HP. Body `{ code }` → `{ valid, reason }` |
 | `POST /api/push` | Terima scan HP. Body `{ code, barcode }` → simpan + kirim webhook → `201` |
-| `GET /api/poll` | Ambil barcode (claim-on-read). `?code=` → `{ scans: [{ id, barcode }] }` — token tidak diperlukan (webhookToken hanya utk verifikasi webhook) |
+| `GET /api/poll` | Ambil barcode (claim-on-read). `?code=` → `{ scans: [{ id, barcode }] }` — token tidak diperlukan. **Auto-extend**: selama ada yang aktif polling, sesi diperpanjang +12 jam bila tersisa < 6 jam (sesi ditutup tidak dihidupkan) |
 | `GET /api/agent/download` | Unduh **Scanner Agent** sebagai ZIP (`vscan-agent.zip`) — isi = folder `scanner-agent/` di repo, selalu sinkron dengan versi terpasang |
 
 **Webhook** (bila `webhookUrl` diisi): VScan kirim `POST { code, scanId, barcode, token, timestamp }`

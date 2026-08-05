@@ -1,8 +1,24 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { lookupActiveSession } from "@/lib/vscan";
+import { lookupActiveSession, SESSION_TTL_MS } from "@/lib/vscan";
 
 export const dynamic = "force-dynamic";
+
+// Auto-extend: selama Scanner Agent aktif polling, sesi tidak pernah kadaluarsa.
+// Perpanjang +12 jam bila tersisa < 6 jam → paling banyak 1x tulis DB per 6 jam
+// (agent polling tiap detik, tapi threshold membuat penulisan jarang).
+const EXTEND_BELOW_MS = 6 * 60 * 60 * 1000;
+
+async function maybeAutoExtend(session: { id: string; expiresAt: Date }) {
+  if (session.expiresAt.getTime() - Date.now() >= EXTEND_BELOW_MS) return;
+  await prisma.scanSession.update({
+    where: { id: session.id },
+    data: {
+      status: "active",
+      expiresAt: new Date(Date.now() + SESSION_TTL_MS),
+    },
+  });
+}
 
 /**
  * Pengambilan barcode oleh PROYEK / Scanner Agent (fallback saat tidak
@@ -15,6 +31,10 @@ export const dynamic = "force-dynamic";
  * verifikasi webhook di sisi proyek; kode pairing sendiri sudah tampil
  * publik, jadi membuka poll hanya dgn kode konsisten dgn model keamanan
  * (claim-on-read mencegah duplikat).
+ *
+ * Auto-extend: selama ada yang aktif polling (Scanner Agent), sesi dijaga
+ * tetap hidup — diperpanjang +12 jam bila tersisa < 6 jam. Sesi yang sudah
+ * ditutup (close/hapus) TIDAK dihidupkan ulang.
  *
  * Claim-on-read atomic: barcode diambil lalu langsung ditandai `polled`,
  * jadi dua poller tidak memproses barcode yang sama.
@@ -33,6 +53,9 @@ export async function GET(req: Request) {
     return NextResponse.json({ scans: [] });
   }
   const session = found.session;
+
+  // Selama ada yang aktif polling (agent kasir), sesi dijaga tetap hidup.
+  await maybeAutoExtend(session);
 
   // Claim pending ATAU failed (webhook sempat gagal) — biar tidak ada scan
   // yang "nyangkut" selamanya ketika URL tujuan down.
