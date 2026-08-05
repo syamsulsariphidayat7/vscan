@@ -30,16 +30,17 @@ echo "  Target folder : $AGENT_DIR"
 if ! command -v curl >/dev/null 2>&1; then
     echo "[1/6] curl belum ada — menginstall curl ..."
     if command -v apt-get >/dev/null 2>&1; then
-        sudo apt-get update -qq && sudo apt-get install -y -qq curl
+        sudo apt-get update -qq && sudo apt-get install -y -qq curl || true
     elif command -v dnf >/dev/null 2>&1; then
-        sudo dnf install -y curl
+        sudo dnf install -y curl || true
     elif command -v pacman >/dev/null 2>&1; then
-        sudo pacman -Sy --noconfirm curl
+        sudo pacman -Sy --noconfirm curl || true
     elif command -v apk >/dev/null 2>&1; then
-        sudo apk add --no-cache curl
+        sudo apk add --no-cache curl || true
     elif command -v brew >/dev/null 2>&1; then
-        brew install curl
-    else
+        brew install curl || true
+    fi
+    if ! command -v curl >/dev/null 2>&1; then
         echo "❌ Tidak bisa menginstall curl otomatis. Install manual lalu jalankan ulang."
         exit 1
     fi
@@ -74,14 +75,17 @@ echo "  ✅ Python: $($PYTHON --version)"
 # -----------------------------------------------------------
 if [[ "$(uname -s)" == "Linux" ]]; then
     echo "[2/6] Menginstall paket sistem pyautogui (scrot, xdotool, tk) ..."
+    # Kegagalan di sini TIDAK mematikan instalasi: Python sudah ada & venv
+    # tetap dibuat; paket sistem hanya diperlukan agar pyautogui bisa mengetik.
     if command -v apt-get >/dev/null 2>&1; then
-        sudo apt-get update -qq && sudo apt-get install -y -qq scrot xdotool python3-tk python3-venv python3-xlib
+        sudo apt-get update -qq && sudo apt-get install -y -qq scrot xdotool python3-tk python3-venv python3-xlib || \
+            echo "  ⚠️  Gagal install paket sistem (butuh sudo?) — lanjut; pyautogui mungkin tidak bisa mengetik."
     elif command -v dnf >/dev/null 2>&1; then
-        sudo dnf install -y scrot xdotool python3-tkinter
+        sudo dnf install -y scrot xdotool python3-tkinter || echo "  ⚠️  Gagal install paket sistem — lanjut."
     elif command -v pacman >/dev/null 2>&1; then
-        sudo pacman -Sy --noconfirm scrot xdotool tk
+        sudo pacman -Sy --noconfirm scrot xdotool tk || echo "  ⚠️  Gagal install paket sistem — lanjut."
     elif command -v apk >/dev/null 2>&1; then
-        sudo apk add --no-cache scrot xdotool tk
+        sudo apk add --no-cache scrot xdotool tk || echo "  ⚠️  Gagal install paket sistem — lanjut."
     else
         echo "  ⚠️  Paket sistem otomatis tidak tersedia — pyautogui mungkin butuh scrot/xdotool."
     fi
