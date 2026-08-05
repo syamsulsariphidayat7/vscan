@@ -18,6 +18,25 @@ fallback offline), registrasi SW pakai `updateViaCache:"none"` + header
 `Cache-Control: no-cache` untuk `/sw.js` — update shell selalu ter-deliver tanpa
 harus hard-refresh manual.
 
+### Scanner Agent — HP jadi scanner barcode nirkabel (2026-08-05) [✔]
+- **Keputusan arsitektur (user)**: POS/toko lain TIDAK boleh dirombak & hasil scan
+  harus masuk kolom autofocus secara otomatis seperti scanner fisik. Karena browser
+  tidak bisa menyuntikkan ketikan ke halaman lain (same-origin policy), dibangun
+  **`scanner-agent/`** — aplikasi kecil yang berjalan di komputer kasir:
+  polling `GET /api/poll?code=KODE` (claim-on-read di server → aman, tanpa duplikat)
+  tiap 1 dtk → ketik barcode + Enter ke OS via `pyautogui` — persis scanner USB,
+  masuk ke kolom autofocus aplikasi POS apa pun (web/desktop) tanpa mengubah kode
+  POS. Cross-platform Windows & Linux (Linux butuh `scrot xdotool python3-tk`).
+- **Fitur agent**: mode `--dry-run` (cetak tanpa mengetik, untuk tes), `--interval`,
+  `--no-enter`, state file lokal (dedup ID scan), konfig via CLI atau env
+  (`VSCAN_URL`/`VSCAN_CODE`/`VSCAN_INTERVAL`), pesan ramah utk 403/400/offline.
+- **E2E (dev server)**: buat sesi `KP6JY4` → push 2 barcode (`8991000000001/2`) →
+  agent dry-run menerima & mencetak keduanya + state tersimpan → antrean kosong →
+  mode menunggu; data uji dibersihkan.
+- **Catatan**: dua komputer memakai kode sama → barcode diketik oleh SATU komputer
+  (claim-on-read); tiap komputer butuh kode pairing sendiri. Agent harus jalan di
+  sesi desktop (bukan SSH tanpa X).
+
 ## Riwayat Fase
 
 ### UX — Simplifikasi Landing (2026-08-05) [✔]
