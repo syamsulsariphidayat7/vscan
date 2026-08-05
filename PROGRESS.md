@@ -46,6 +46,17 @@ harus hard-refresh manual.
   `install-autostart-linux.sh` (`~/.config/autostart/vscan-agent.desktop`) — agent
   otomatis berjalan setiap login. Validasi: py_compile, `bash -n`, tes `agent.env`
   terbaca (Kode TEST1234 + Server custom tampil tanpa argumen).
+- **Installer curl one-liner (2026-08-05)**: `install.sh` (Linux/macOS) &
+  `install.ps1` (Windows) — auto-install curl/Python/paket sistem per distro,
+  download file ke `~/vscan-agent` (Linux) / `%USERPROFILE%\vscan-agent`
+  (Windows), buat virtualenv + pyautogui (+ `python3-xlib` utk Linux), tulis
+  `agent.env`, tawarkan auto-start, lalu jalankan. `start-agent.sh/.bat` kini
+  memakai `.venv` bila ada. Perintah:
+  Linux `curl -sSL …/install.sh | bash` · Windows `curl … -o %TEMP%\…ps1 &&
+  powershell -ExecutionPolicy Bypass -File %TEMP%\…ps1`. Diperbaiki saat tes:
+  kegagalan sudo tidak mematikan installer (lanjut + peringatan), `python3-xlib`
+  >=0.15 (PyPI max 0.15), pesan ramah bila tanpa sesi desktop (Xlib/XauthError).
+  E2E: curl one-liner penuh → semua langkah berhasil & `agent.env` terisi kode.
 
 ## Riwayat Fase
 
