@@ -14,6 +14,7 @@ import {
   History,
   Download,
   HardDriveDownload,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { checkPairingCode, checkReasonMessage } from "@/lib/api";
@@ -86,6 +87,34 @@ export default function HomePage() {
       router.push(`/scan?code=${encodeURIComponent(code)}`);
     } finally {
       setConnecting(false);
+    }
+  };
+
+  // Hapus sesi milik sendiri dari daftar (tutup sesi → hilang dari list aktif).
+  const removeSession = async (s: ProjectSession) => {
+    if (connecting) return;
+    if (!window.confirm(`Hapus "${s.label}" (${s.code}) dari daftar?`)) return;
+    try {
+      const res = await fetch("/api/session", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: s.id, action: "close" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(typeof data.error === "string" ? data.error : "Gagal menghapus sesi");
+        return;
+      }
+      toast.success(`Sesi ${s.code} dihapus dari daftar`);
+      // Kalau sesi yang dihapus = kode terakhir tersimpan, bersihkan agar
+      // tombol Scan / "Lanjutkan" tidak mencoba pair kode yang sudah ditutup.
+      if (lastCode === s.code) {
+        localStorage.removeItem(LAST_CODE_KEY);
+        setLastCode(null);
+      }
+      loadSessions();
+    } catch {
+      toast.error("Gagal menghapus sesi — coba lagi");
     }
   };
 
@@ -267,13 +296,13 @@ export default function HomePage() {
               {sessions.map((s) => {
                 const isConnected = lastCode === s.code;
                 return (
-                  <li key={s.id}>
+                  <li key={s.id} className="flex items-stretch gap-1.5">
                     <button
                       type="button"
                       onClick={() => pair(s.code)}
                       disabled={connecting}
                       className={
-                        "group flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition-all active:scale-[0.99] disabled:opacity-60 " +
+                        "group flex min-w-0 flex-1 items-center gap-3 rounded-xl border px-3 py-3 text-left transition-all active:scale-[0.99] disabled:opacity-60 " +
                         (isConnected
                           ? "border-primary/50 bg-primary/5 hover:bg-primary/10"
                           : "border-border bg-muted/50 hover:border-primary/40 hover:bg-muted")
@@ -323,6 +352,18 @@ export default function HomePage() {
                         aria-hidden="true"
                       />
                     </button>
+                    {s.owned && (
+                      <button
+                        type="button"
+                        onClick={() => removeSession(s)}
+                        disabled={connecting}
+                        className="flex w-11 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/50 text-muted-foreground transition-all hover:border-red-300 hover:bg-red-50 hover:text-red-600 active:scale-[0.98] disabled:opacity-50 dark:hover:border-red-800 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                        title="Hapus sesi dari daftar"
+                        aria-label={`Hapus sesi ${s.label}`}
+                      >
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    )}
                   </li>
                 );
               })}

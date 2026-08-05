@@ -13,6 +13,16 @@ scanner USB, tanpa mengubah kode POS), atau via webhook/polling.
 
 ## Perubahan Terbaru
 
+### 🗑️ Tombol hapus di list pair landing (2026-08-05)
+- Landing `/`: setiap sesi **milik sendiri** (owned) kini punya tombol hapus
+  (ikon tempat sampah) di samping row — konfirmasi → PATCH `close` → hilang
+  dari daftar. Sesi milik orang lain tidak bisa dihapus (API juga memeriksa
+  ownerId → 403).
+- Jika sesi yang dihapus = kode terakhir tersimpan, localStorage dibersihkan
+  agar tombol Scan tidak mencoba pair kode yang sudah ditutup.
+- Terverifikasi: API E2E (owned → close → hilang) + browser (tombol muncul &
+  tanpa error konsol).
+
 ### 🔓 Fix: /api/poll tidak lagi butuh token (2026-08-05)
 - Masalah: sesi yang punya `webhookToken` (mis. sisa sesi lama era UI token)
   membuat Scanner Agent dapat 403 "token tidak cocok" saat polling — padahal
