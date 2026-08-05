@@ -191,7 +191,8 @@ def fetch_scans(url: str, code: str) -> list[dict]:
             data = json.loads(res.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         if e.code == 403:
-            log("⚠️  Kode pairing benar tapi token tidak cocok (sesi memakai token).")
+            log("⚠️  Sesi menolak polling (403). Buat kode pairing baru di "
+                "vscan.boundless.my.id lalu perbarui VSCAN_CODE di agent.env.")
         elif e.code == 400:
             log("⚠️  Kode pairing tidak valid.")
         else:

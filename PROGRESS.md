@@ -13,6 +13,15 @@ scanner USB, tanpa mengubah kode POS), atau via webhook/polling.
 
 ## Perubahan Terbaru
 
+### 🔓 Fix: /api/poll tidak lagi butuh token (2026-08-05)
+- Masalah: sesi yang punya `webhookToken` (mis. sisa sesi lama era UI token)
+  membuat Scanner Agent dapat 403 "token tidak cocok" saat polling — padahal
+  UI tidak pernah menampilkan token lagi.
+- Fix: syarat token dihapus dari `GET /api/poll` (token tetap dipakai utk
+  verifikasi webhook di sisi proyek). Kode pairing sudah tampil publik, jadi
+  membuka poll dgn kode saja konsisten dgn model keamanan (claim-on-read).
+- Pesan 403 di agent diperjelas: sarankan buat kode pairing baru.
+
 ### 📥 Download Scanner Agent dari browser (2026-08-05)
 - Endpoint baru **`GET /api/agent/download`** → `vscan-agent.zip` berisi seluruh
   file `scanner-agent/` (agent.py, launcher bat/sh, auto-start, README,

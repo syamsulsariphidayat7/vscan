@@ -5,11 +5,16 @@ import { lookupActiveSession } from "@/lib/vscan";
 export const dynamic = "force-dynamic";
 
 /**
- * Pengambilan barcode oleh PROYEK (fallback saat tidak memakai webhook).
+ * Pengambilan barcode oleh PROYEK / Scanner Agent (fallback saat tidak
+ * memakai webhook).
  *
- * GET /api/poll?code=KODE&token=TOKEN
- *  - code  — kode pairing
- *  - token — harus cocok dgn webhookToken sesi bila sesi punya token
+ * GET /api/poll?code=KODE
+ *  - code — kode pairing
+ *
+ * Catatan: webhookToken TIDAK diperlukan di sini. Token itu hanya untuk
+ * verifikasi webhook di sisi proyek; kode pairing sendiri sudah tampil
+ * publik, jadi membuka poll hanya dgn kode konsisten dgn model keamanan
+ * (claim-on-read mencegah duplikat).
  *
  * Claim-on-read atomic: barcode diambil lalu langsung ditandai `polled`,
  * jadi dua poller tidak memproses barcode yang sama.
@@ -18,7 +23,6 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const code = (url.searchParams.get("code") || "").trim().toUpperCase();
-  const token = url.searchParams.get("token") || "";
 
   if (!code) {
     return NextResponse.json({ error: "Param code wajib diisi" }, { status: 400 });
@@ -29,11 +33,6 @@ export async function GET(req: Request) {
     return NextResponse.json({ scans: [] });
   }
   const session = found.session;
-
-  // Verifikasi token bila sesi memakainya.
-  if (session.webhookToken && token !== session.webhookToken) {
-    return NextResponse.json({ error: "Token tidak valid" }, { status: 403 });
-  }
 
   // Claim pending ATAU failed (webhook sempat gagal) — biar tidak ada scan
   // yang "nyangkut" selamanya ketika URL tujuan down.
