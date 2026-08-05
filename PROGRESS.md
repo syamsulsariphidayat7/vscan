@@ -13,6 +13,26 @@ scanner USB, tanpa mengubah kode POS), atau via webhook/polling.
 
 ## Perubahan Terbaru
 
+### 📥 Download Scanner Agent dari browser (2026-08-05)
+- Endpoint baru **`GET /api/agent/download`** → `vscan-agent.zip` berisi seluruh
+  file `scanner-agent/` (agent.py, launcher bat/sh, auto-start, README,
+  agent.env.example) — dibangun server-side tanpa dependensi baru
+  (`src/lib/zip.ts`, format ZIP stored, teruji dengan unzip/python zipfile).
+- Halaman `/register` kini punya tombol **"Download vscan-agent.zip"** + panduan
+  3 langkah (ekstrak → isi VSCAN_CODE → jalankan start-agent).
+- ZIP selalu sinkron dengan versi terpasang (baca folder di repo yang sama).
+- Catatan: sementara ini perubahan di-commit LOKAL tanpa push (atas permintaan
+  user), jadi versi live masih versi push terakhir.
+
+### 🐧 Fix Wayland/X11 di Scanner Agent (2026-08-05)
+- `agent.py`: backend pengetikan dipilih otomatis — **pyautogui (X11)** dengan
+  auto-detect file Xauthority (mis. `/run/user/UID/gdm/Xauthority`) bila
+  `~/.Xauthority` hilang, atau **ydotool (Wayland)** bila tersedia. Tanpa
+  backend → pesan diagnosa lengkap (XDG_SESSION_TYPE, DISPLAY, solusi).
+- Baris startup kini menampilkan `Backend: pyautogui/ydotool`.
+- `install.sh`: tambah paket `ydotool` (apt/dnf). README agent: section
+  Wayland + troubleshooting baru.
+
 ### 🧹 Simplifikasi — URL tujuan dihapus dari form (2026-08-05)
 - Modal pendaftaran kini **1 field saja: nama proyek** — field URL tujuan
   dihapus dari UI. Alasan: jalur utama (Scanner Agent) memakai polling

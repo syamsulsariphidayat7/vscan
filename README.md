@@ -55,7 +55,7 @@ Panduan lengkap: [`scanner-agent/README.md`](scanner-agent/README.md).
 | Halaman | Fungsi |
 |---|---|
 | `/` (landing HP) | Tombol **Scan** besar (lanjut kode terakhir / scan QR pairing) + daftar **"Proyek terhubung"** (klik = pair, auto-refresh 15 dtk) + tombol daftarkan proyek |
-| `/register` | Daftar sesi pairing aktif — salin kode, **perpanjang / tutup** (hanya sesi milik browser ini) |
+| `/register` | Daftar sesi pairing aktif — salin kode, **perpanjang / tutup** (hanya sesi milik browser ini) + **Download Scanner Agent** (ZIP untuk komputer kasir) |
 | `/scan` | Kamera scanner + log + status sesi + senter + wake lock |
 
 ## 🔌 API
@@ -68,6 +68,7 @@ Panduan lengkap: [`scanner-agent/README.md`](scanner-agent/README.md).
 | `POST /api/check` | Validasi kode HP. Body `{ code }` → `{ valid, reason }` |
 | `POST /api/push` | Terima scan HP. Body `{ code, barcode }` → simpan + kirim webhook → `201` |
 | `GET /api/poll` | Ambil barcode (claim-on-read). `?code=` (+ `&token=` bila sesi memakai token) → `{ scans: [{ id, barcode }] }` |
+| `GET /api/agent/download` | Unduh **Scanner Agent** sebagai ZIP (`vscan-agent.zip`) — isi = folder `scanner-agent/` di repo, selalu sinkron dengan versi terpasang |
 
 **Webhook** (bila `webhookUrl` diisi): VScan kirim `POST { code, scanId, barcode, token, timestamp }`
 ke URL tujuan; gagal → barcode tetap tersimpan dan bisa diambil via `/api/poll`.
@@ -111,7 +112,7 @@ vscan/
 │   │   ├── page.tsx            # Landing HP: Scan + daftar proyek + modal daftar
 │   │   ├── register/page.tsx   # Kelola sesi pairing
 │   │   ├── scan/page.tsx       # Scanner kamera
-│   │   └── api/{session,check,push,poll}/
+│   │   └── api/{session,check,push,poll,agent}/
 │   ├── components/register-modal.tsx
 │   ├── hooks/use-barcode-detector.ts
 │   └── lib/{db,vscan,api}.ts

@@ -10,6 +10,8 @@ import {
   PowerOff,
   QrCode,
   Plus,
+  Download,
+  HardDriveDownload,
 } from "lucide-react";
 import { toast } from "sonner";
 import { RegisterModal } from "@/components/register-modal";
@@ -139,6 +141,44 @@ export default function RegisterPage() {
           <Plus className="h-4 w-4" aria-hidden="true" />
           Buat Kode Pairing Baru
         </button>
+
+        {/* Download Scanner Agent untuk komputer kasir */}
+        <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <div className="flex items-center gap-1.5 pb-1">
+            <HardDriveDownload className="h-4 w-4 text-primary" aria-hidden="true" />
+            <h2 className="text-sm font-semibold">Scanner Agent — komputer kasir</h2>
+          </div>
+          <p className="pb-3 text-xs text-muted-foreground">
+            Install sekali di komputer kasir agar barcode hasil scan HP otomatis
+            diketik ke kolom POS — tanpa mengubah kode POS.
+          </p>
+          <a
+            href="/api/agent/download"
+            download="vscan-agent.zip"
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary-strong text-white font-semibold shadow-sm transition-all hover:bg-primary-hover hover:shadow-md active:scale-[0.98]"
+          >
+            <Download className="h-4 w-4" aria-hidden="true" />
+            Download vscan-agent.zip
+          </a>
+          <ol className="mt-3 space-y-1.5 text-xs text-muted-foreground">
+            <li className="flex gap-2">
+              <span className="font-mono font-semibold text-foreground">1.</span>
+              Download &amp; ekstrak ZIP di komputer kasir.
+            </li>
+            <li className="flex gap-2">
+              <span className="font-mono font-semibold text-foreground">2.</span>
+              Salin <span className="font-mono">agent.env.example</span> jadi{" "}
+              <span className="font-mono">agent.env</span>, isi{" "}
+              <span className="font-mono">VSCAN_CODE</span> dengan kode pairing di atas.
+            </li>
+            <li className="flex gap-2">
+              <span className="font-mono font-semibold text-foreground">3.</span>
+              Windows: double-click{" "}
+              <span className="font-mono">start-agent.bat</span> · Linux:{" "}
+              <span className="font-mono">./start-agent.sh</span>
+            </li>
+          </ol>
+        </section>
 
         {/* Daftar sesi aktif milik browser ini */}
         <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
