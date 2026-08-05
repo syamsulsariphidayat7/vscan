@@ -10,7 +10,13 @@
 region Singapore) — `DATABASE_URL` pooled sudah di-set di Vercel (production, type Sensitive),
 migrasi `init` + `add_owner_id` sudah di-deploy, dan domain utama sudah dialiaskan ke deployment
 dengan env tersebut. E2E produksi terverifikasi: register proyek → `201` + kode, list tampil
-(`owned` benar), push barcode → `201`, data uji dibersihkan.
+(`owned` benar), push barcode → `201`, data uji dibersihkan. Domain custom
+**vscan.boundless.my.id** aktif (nameserver Cloudflare, content identik dgn
+deployment terbaru). **Fix PWA update-stuck** (`c042572`): cache SW di-bump ke
+`vscan-shell-v2`, navigasi kini **network-first** (HTML selalu fresh, cache hanya
+fallback offline), registrasi SW pakai `updateViaCache:"none"` + header
+`Cache-Control: no-cache` untuk `/sw.js` — update shell selalu ter-deliver tanpa
+harus hard-refresh manual.
 
 ## Riwayat Fase
 
