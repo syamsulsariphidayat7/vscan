@@ -96,6 +96,14 @@ def type_barcode(barcode: str, enter: bool) -> None:
             file=sys.stderr,
         )
         sys.exit(2)
+    except Exception as e:  # mis. tanpa sesi desktop (SSH): Xlib/XauthError
+        print(
+            f"❌ Tidak bisa mengakses layar untuk mengetik ({e}).\n"
+            "   Jalankan agent dari SESI DESKTOP komputer kasir (bukan SSH "
+            "tanpa layar).",
+            file=sys.stderr,
+        )
+        sys.exit(2)
 
 
 def load_known(path: str) -> set[str]:
@@ -154,6 +162,14 @@ def main() -> None:
             print(
                 "❌ Library 'pyautogui' belum terpasang.\n"
                 "   Install sekali:  pip install -r requirements.txt",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        except Exception as e:  # mis. tanpa sesi desktop: Xlib/XauthError
+            print(
+                f"❌ Tidak bisa mengakses layar ({e}).\n"
+                "   Jalankan agent dari SESI DESKTOP komputer kasir "
+                "(bukan SSH tanpa layar).",
                 file=sys.stderr,
             )
             sys.exit(2)
