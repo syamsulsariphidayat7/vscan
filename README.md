@@ -54,7 +54,7 @@ Panduan lengkap: [`scanner-agent/README.md`](scanner-agent/README.md).
 
 | Halaman | Fungsi |
 |---|---|
-| `/` (landing HP) | Tombol **Scan** besar (lanjut kode terakhir / scan QR pairing) + daftar **"Proyek terhubung"** (klik = pair, auto-refresh 15 dtk) + tombol daftarkan proyek |
+| `/` (landing HP) | Tombol **Scan** besar (lanjut kode terakhir / scan QR pairing) + daftar **"Proyek terhubung"** (klik = pair, auto-refresh 15 dtk) + tombol daftarkan proyek + **download Scanner Agent** |
 | `/register` | Daftar sesi pairing aktif — salin kode, **perpanjang / tutup** (hanya sesi milik browser ini) + **Download Scanner Agent** (ZIP untuk komputer kasir) |
 | `/scan` | Kamera scanner + log + status sesi + senter + wake lock |
 

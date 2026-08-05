@@ -19,7 +19,8 @@ scanner USB, tanpa mengubah kode POS), atau via webhook/polling.
   agent.env.example) — dibangun server-side tanpa dependensi baru
   (`src/lib/zip.ts`, format ZIP stored, teruji dengan unzip/python zipfile).
 - Halaman `/register` kini punya tombol **"Download vscan-agent.zip"** + panduan
-  3 langkah (ekstrak → isi VSCAN_CODE → jalankan start-agent).
+  3 langkah (ekstrak → isi VSCAN_CODE → jalankan start-agent); landing `/` juga
+  punya section download ringkas (gaya sekunder, di bawah daftar proyek).
 - ZIP selalu sinkron dengan versi terpasang (baca folder di repo yang sama).
 - Catatan: sementara ini perubahan di-commit LOKAL tanpa push (atas permintaan
   user), jadi versi live masih versi push terakhir.

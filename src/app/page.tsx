@@ -12,6 +12,8 @@ import {
   QrCode,
   RefreshCw,
   History,
+  Download,
+  HardDriveDownload,
 } from "lucide-react";
 import { toast } from "sonner";
 import { checkPairingCode, checkReasonMessage } from "@/lib/api";
@@ -326,6 +328,26 @@ export default function HomePage() {
               })}
             </ul>
           )}
+        </section>
+
+        {/* Download Scanner Agent untuk komputer kasir */}
+        <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <div className="flex items-center gap-1.5 pb-1">
+            <HardDriveDownload className="h-4 w-4 text-primary" aria-hidden="true" />
+            <h2 className="text-sm font-semibold">Scanner Agent — komputer kasir</h2>
+          </div>
+          <p className="pb-3 text-xs text-muted-foreground">
+            Install sekali di komputer kasir agar barcode hasil scan HP otomatis
+            diketik ke POS.
+          </p>
+          <a
+            href="/api/agent/download"
+            download="vscan-agent.zip"
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-border bg-muted/50 text-sm font-semibold text-foreground transition-all hover:bg-muted active:scale-[0.98]"
+          >
+            <Download className="h-4 w-4 text-primary" aria-hidden="true" />
+            Download vscan-agent.zip
+          </a>
         </section>
 
         {lastCode && !qrMode && (
