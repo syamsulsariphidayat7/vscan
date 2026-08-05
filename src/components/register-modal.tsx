@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  Link2,
   Loader2,
   Copy,
   Check,
@@ -66,7 +65,6 @@ export function RegisterModal({
   onCreated?: (session: CreatedSession) => void;
 }) {
   const [label, setLabel] = useState("");
-  const [webhookUrl, setWebhookUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<CreatedSession | null>(null);
@@ -119,7 +117,6 @@ export function RegisterModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           label: label.trim(),
-          webhookUrl: webhookUrl.trim() || undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -184,7 +181,7 @@ export function RegisterModal({
                 Daftarkan Proyek
               </h2>
               <p className="text-sm text-muted-foreground">
-                VScan mandiri — proyek apa pun cukup mendaftarkan URL tujuan
+                Daftarkan proyek/kasir — HP langsung bisa scan barcode ke sesi ini
               </p>
             </div>
 
@@ -201,24 +198,6 @@ export function RegisterModal({
                   placeholder="contoh: Kasir 1 — Apotek Sehat"
                   className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
-              </div>
-
-              <div className="space-y-1.5">
-                <label htmlFor="rm-webhook" className="flex items-center gap-1.5 text-sm font-medium">
-                  <Link2 className="h-4 w-4 text-primary" aria-hidden="true" />
-                  URL tujuan (webhook)
-                </label>
-                <input
-                  id="rm-webhook"
-                  value={webhookUrl}
-                  onChange={(e) => setWebhookUrl(e.target.value)}
-                  placeholder="https://projek-anda.com/api/terima-scan"
-                  inputMode="url"
-                  className="h-11 w-full rounded-xl border border-border bg-background px-4 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Barcode hasil scan HP dikirim ke URL ini via POST. Kosongkan untuk memakai polling.
-                </p>
               </div>
 
               {error && (
@@ -309,37 +288,24 @@ export function RegisterModal({
               </p>
             </div>
 
-            {/* Info tujuan */}
-            <div className="rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm space-y-2">
-              <p className="flex items-center gap-2">
-                <Link2 className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-                <span className="text-muted-foreground">Barcode dikirim ke:</span>
-              </p>
-              <p className="break-all font-mono text-xs">
-                {created.webhookUrl ?? "— (tidak ada webhook; pakai GET /api/poll)"}
-              </p>
-            </div>
-
             {/* Cara pakai */}
             <div className="space-y-2 text-left text-sm text-muted-foreground">
               <p className="flex gap-2">
                 <span className="font-mono font-semibold text-foreground">1.</span>
-                Kasir membuka VScan di HP, scan QR atau mengetik kode di atas, lalu scan barcode.
+                Pasang Scanner Agent di komputer kasir (sekali) — agent mengambil
+                barcode via{" "}
+                <span className="font-mono text-xs">GET /api/poll</span> dan
+                mengetik ke kolom POS seperti scanner USB.
               </p>
               <p className="flex gap-2">
                 <span className="font-mono font-semibold text-foreground">2.</span>
-                Tiap scan dikirim ke URL tujuan{" "}
-                <span className="font-mono text-xs">POST {created.webhookUrl}</span>{" "}
-                dengan body{" "}
-                <span className="font-mono text-xs">
-                  {"{ code, scanId, barcode, timestamp }"}
-                </span>
-                .
+                Kasir membuka VScan di HP, scan QR atau mengetik kode di atas, lalu
+                scan barcode.
               </p>
               <p className="flex gap-2">
                 <span className="font-mono font-semibold text-foreground">3.</span>
-                Tanpa webhook, polling{" "}
-                <span className="font-mono text-xs">GET /api/poll?code=…</span>.
+                Detik itu juga barcode masuk ke kolom POS yang sedang fokus — tanpa
+                mengubah kode POS.
               </p>
             </div>
 

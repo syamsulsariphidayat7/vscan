@@ -13,6 +13,15 @@ scanner USB, tanpa mengubah kode POS), atau via webhook/polling.
 
 ## Perubahan Terbaru
 
+### 🧹 Simplifikasi — URL tujuan dihapus dari form (2026-08-05)
+- Modal pendaftaran kini **1 field saja: nama proyek** — field URL tujuan
+  dihapus dari UI. Alasan: jalur utama (Scanner Agent) memakai polling
+  `/api/poll`, jadi URL tidak pernah dibutuhkan pemakai.
+- Backend tetap mendukung `webhookUrl`/`webhookToken` via `POST /api/session`
+  untuk proyek yang butuh menerima POST langsung (dokumentasi API tetap ada).
+- Teks sukses modal & subtitle `/register` disesuaikan (barcode diambil via
+  polling oleh Scanner Agent).
+
 ### 🧹 Rapi-rapi & dokumentasi (2026-08-05)
 - README & PROGRESS ditulis ulang: ringkas, sesuai kondisi terakhir; bagian usang
   (alur lama dengan token di UI, referensi project duplikat `vscan-alpha`, riwayat
@@ -47,8 +56,8 @@ scanner USB, tanpa mengubah kode POS), atau via webhook/polling.
   tombol **"Daftarkan Proyek / POS"** (modal), daftar **"Proyek terhubung"**
   (semua sesi aktif, klik = pair, auto-refresh 15 dtk, sesi milik sendiri
   ditandai "milik saya" + badge Aktif/Terhubung).
-- Modal pendaftaran **2 field saja**: nama proyek + URL tujuan. Field token
-  dihapus dari UI (kode pairing dibuat otomatis di backend).
+- Modal pendaftaran **1 field: nama proyek** (URL tujuan juga dihapus dari UI;
+  kode pairing dibuat otomatis di backend).
 - `GET /api/session` = **list publik semua sesi aktif** dengan flag `owned`
   (cookie `vscan_owner`); webhookUrl/token TIDAK diekspos. `/register`
   menampilkan list yang sama, tombol kelola (salin/perpanjang/tutup) hanya utk

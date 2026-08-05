@@ -19,8 +19,12 @@ HP (kamera) ──scan──► VScan (vscan.boundless.my.id) ──► Komputer
 
 ### 1. Daftarkan proyek/POS (sekali, dari komputer)
 - Buka **vscan.boundless.my.id** → klik **"Daftarkan Proyek / POS"**
-- Isi **2 field**: nama proyek (mis. "Apotek Sehat") + URL tujuan (opsional)
+- Isi **1 field**: nama proyek (mis. "Apotek Sehat")
 - VScan membuat **kode pairing 6 karakter** (berlaku **12 jam**)
+
+> URL tujuan tidak lagi ditanyakan di form — barcode diambil komputer kasir
+> lewat polling (`/api/poll`). Webhook tetap didukung via API untuk proyek yang
+> butuh menerima POST langsung (lihat bagian API).
 
 ### 2. Pasang Scanner Agent di komputer kasir (sekali, ~1 menit)
 ```bash
