@@ -13,6 +13,19 @@ scanner USB, tanpa mengubah kode POS), atau via webhook/polling.
 
 ## Perubahan Terbaru
 
+### 🔓 Fix: 403 Cloudflare — agent pakai User-Agent browser (2026-08-05)
+- **Gejala**: agent terus log "Polling ditolak (403)" meski sesi aktif &
+  `/api/poll` tidak punya jalur 403 lagi (kode lama sudah dihapus).
+- **Akar masalah**: `vscan.boundless.my.id` di belakang **Cloudflare**, dan
+  Cloudflare memblokir User-Agent default Python (`Python-urllib/x.y` — bot
+  detection). Terverifikasi live: 10/10 poll UA Python → 403; 5/5 poll UA
+  browser → 200 (header `server: cloudflare`, `cf-ray`).
+- **Fix**: `fetch_scans` di `agent.py` mengirim header `User-Agent` browser
+  (Chrome) tiap request.
+- **Update komputer kasir**: jalankan ulang perintah curl install yang sama
+  (instalasi idempoten — `agent.py` ditimpa versi terbaru, `agent.env` kode
+  pairing tetap dipertahankan).
+
 ### 🗑️ Webhook dihapus total (2026-08-05)
 - Kolom `webhookUrl` & `webhookToken` **DIDROP** dari `ScanSession` — migrasi
   `20260805153833_remove_webhook` diterapkan ke lokal & Neon produksi

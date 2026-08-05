@@ -180,19 +180,31 @@ def select_typing_backend(dry_run: bool) -> None:
     sys.exit(2)
 
 
+# UA browser: Cloudflare di depan vscan.boundless.my.id MEMBLOKIR default
+# "Python-urllib/x.y" (bot detection → 403). Tanpa UA ini agent selalu 403.
+_BROWSER_UA = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+)
+
+
 def fetch_scans(url: str, code: str) -> list[dict]:
     """Ambil barcode baru dari VScan (claim-on-read di server, jadi aman
     di-poll berulang tanpa duplikat)."""
     params = urllib.parse.urlencode({"code": code})
     endpoint = f"{url.rstrip('/')}/api/poll?{params}"
-    req = urllib.request.Request(endpoint, method="GET")
+    req = urllib.request.Request(
+        endpoint,
+        method="GET",
+        headers={"User-Agent": _BROWSER_UA},
+    )
     try:
         with urllib.request.urlopen(req, timeout=POLL_TIMEOUT) as res:
             data = json.loads(res.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         if e.code == 403:
-            log("⚠️  Polling ditolak sesaat (403) — mencoba lagi otomatis. "
-                "Tidak perlu ganti kode; kalau berlanjut cek koneksi internet.")
+            log("⚠️  Polling ditolak (403) — biasanya blokir sesaat Cloudflare, "
+                "mencoba lagi otomatis. Tidak perlu ganti kode.")
         elif e.code == 400:
             log("⚠️  Kode pairing tidak valid.")
         else:

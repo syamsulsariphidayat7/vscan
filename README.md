@@ -47,6 +47,12 @@ Panduan lengkap: [`scanner-agent/README.md`](scanner-agent/README.md).
 > Kode pairing kadaluarsa 12 jam → buat kode baru di halaman depan, ganti
 > `VSCAN_CODE` di `agent.env`, restart agent.
 
+### 🔄 Update agent ke versi terbaru
+Jalankan ulang perintah curl install yang sama (idempoten — file agent ditimpa
+versi terbaru, **`agent.env` kode pairing tetap dipertahankan**). Versi terbaru
+mengirim User-Agent browser, sehingga tidak lagi kena blokir 403 Cloudflare
+(penyebab umum pesan "Polling ditolak (403)").
+
 ---
 
 ## 📄 Halaman
