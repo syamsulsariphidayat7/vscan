@@ -107,6 +107,37 @@ pnpm dev                             # http://localhost:3000
    ```
 5. Custom domain: Vercel → project `vscan` → **Domains** → tambah `vscan.boundless.my.id` (arahkan DNS/CNAME).
 
+## 🏠 Self-host (opsional — tanpa Vercel, tanpa root)
+
+Jalankan di server sendiri (mis. VPS di Indonesia) untuk latensi terbaik:
+scan→POS **~0,5–1 dtk** (vs 2–7 dtk lewat Vercel Hobby yang region-nya di AS).
+Memakai **Cloudflare Tunnel** — tidak perlu root, tidak perlu buka port 80:
+
+```bash
+# 1. Di server: clone repo, install, build
+pnpm install && pnpm build
+
+# 2. Env produksi (Neon) — di luar repo, dibaca systemd
+mkdir -p ~/.config/vscan
+echo 'DATABASE_URL="postgresql://...neon.tech/neondb?sslmode=require"' > ~/.config/vscan/env
+
+# 3. Login Cloudflare SEKALI (browser terbuka, pilih akun pemilik boundless.my.id)
+~/.local/bin/cloudflared tunnel login
+
+# 4. Setup otomatis: buat tunnel, route DNS, aktifkan service app + tunnel
+bash scripts/selfhost/setup.sh
+
+# 5. (Disarankan) agar service tetap hidup setelah logout/reboot
+sudo loginctl enable-linger anaya
+```
+
+Setelah itu `vscan.boundless.my.id` otomatis mengarah ke server ini (DNS
+di-route tunnel; Vercel tidak dipakai lagi). Deploy versi baru:
+
+```bash
+git pull && pnpm build && systemctl --user restart vscan
+```
+
 ## 🗂 Struktur
 
 ```

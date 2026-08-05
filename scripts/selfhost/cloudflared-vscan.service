@@ -1,0 +1,12 @@
+[Unit]
+Description=Cloudflare Tunnel vscan.boundless.my.id
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/cloudflared tunnel --config %h/.cloudflared/vscan.yml run vscan
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

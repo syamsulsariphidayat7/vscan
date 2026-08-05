@@ -13,6 +13,24 @@ scanner USB, tanpa mengubah kode POS), atau via webhook/polling.
 
 ## Perubahan Terbaru
 
+### 🏠 Self-host: Cloudflare Tunnel + systemd (2026-08-05)
+- **Keputusan user**: pindah dari Vercel ke server sendiri untuk latensi
+  (fungsi Vercel Hobby di AS + Neon Singapura = 2–7 dtk; tak bisa ganti
+  region di plan Hobby).
+- **App produksi** jalan di server sendiri: port 3000, systemd `--user`
+  (`vscan.service`, auto-restart). Env Neon di `~/.config/vscan/env`
+  (di luar repo, tanpa secret ke git).
+- **Cloudflare Tunnel** (`cloudflared` binary tanpa root):
+  `vscan.boundless.my.id` → `localhost:3000` — tidak perlu root/port 80,
+  tidak perlu ubah TLS mode. DNS di-route otomatis oleh tunnel.
+- `scripts/selfhost/`: `setup.sh` (idempoten) + unit `vscan-app.service` &
+  `cloudflared-vscan.service`.
+- **Latensi terukur di server baru**: poll ~0,2 dtk (vs 1,6 dtk), push ~0,3
+  dtk (vs 1,5–5 dtk), E2E scan→POS ~0,5–1 dtk.
+- **Langkah user tersisa**: `cloudflared tunnel login` (browser) →
+  `bash scripts/selfhost/setup.sh` → (opsional) `sudo loginctl enable-linger
+  anaya`. Setelah DNS pindah, Vercel tidak dipakai lagi.
+
 ### ⚡ Long-poll di /api/poll — barcode terdeteksi ~0,3 dtk (2026-08-05)
 - **Masalah**: delay scan→POS ~2–4,5 dtk. Fungsi Vercel Hobby di-pin ke
   `iad1` (US) & tidak bisa ganti region (fitur Pro), Neon di Singapura →
