@@ -41,6 +41,10 @@ kode pairing pertama.
   menampilkan 2 sesi (owned benar); klik "Apotek Sehat" → `/scan?code=…`; modal daftar punya
   tepat 2 input, tanpa field token; data uji dibersihkan
 - Validasi: lint bersih, build sukses
+- **Deploy**: commit `e7cb5ea` di-push ke `main` → Vercel auto-deploy → produksi
+  https://vscan-alpha.vercel.app HTTP 200, menampilkan halaman baru (Scan, Daftarkan Proyek,
+  Proyek terhubung). **Menunggu user**: set `DATABASE_URL` Neon di Vercel + `pnpm db:deploy`
+  (migrasi `add_owner_id` belum ada di Neon) — tanpa itu list proyek produksi kosong
 
 ### UX — User-Friendly Pass (2026-08-05) [✔]
 - **Pendaftaran proyek = modal (tidak pindah halaman)**: komponen bersama `RegisterModal`
