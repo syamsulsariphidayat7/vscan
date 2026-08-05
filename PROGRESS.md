@@ -22,8 +22,11 @@ scanner USB, tanpa mengubah kode POS), atau via webhook/polling.
   3 langkah (ekstrak → isi VSCAN_CODE → jalankan start-agent); landing `/` juga
   punya section download ringkas (gaya sekunder, di bawah daftar proyek).
 - ZIP selalu sinkron dengan versi terpasang (baca folder di repo yang sama).
-- Catatan: sementara ini perubahan di-commit LOKAL tanpa push (atas permintaan
-  user), jadi versi live masih versi push terakhir.
+- ✅ **Sudah ter-push & live**: commit `4255b77` + `c210d42` + `221eb60` naik ke
+  `main` dan auto-deploy Vercel. Terverifikasi live:
+  - landing `vscan.boundless.my.id` menampilkan section download
+  - `GET /api/agent/download` → 200, ZIP valid, berisi `agent.py` versi
+    dengan fix Wayland (ydotool)
 
 ### 🐧 Fix Wayland/X11 di Scanner Agent (2026-08-05)
 - `agent.py`: backend pengetikan dipilih otomatis — **pyautogui (X11)** dengan
