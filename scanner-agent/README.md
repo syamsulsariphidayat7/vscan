@@ -92,7 +92,24 @@ Scan dari HP → muncul `📥 [DRY-RUN] barcode diterima: 8991...` → berhenti 
 |---|---|
 | "Python tidak ditemukan" (Windows) | Install Python & centang "Add to PATH", lalu jalankan ulang |
 | `pyautogui` gagal install di Linux | `sudo apt install -y python3-pip scrot xdotool python3-tk` |
+| ❌ `~/.Xauthority: No such file or directory` | Cek sesi: `echo $XDG_SESSION_TYPE`. Di **X11**: jalankan dari terminal di desktop (bukan SSH); agent mencari file Xauthority otomatis (mis. `/run/user/UID/gdm/Xauthority`). Di **Wayland**: install `ydotool` (di bawah) |
+| ❌ "Tidak ada backend pengetikan" di **Wayland** | `sudo apt install ydotool && sudo systemctl enable --now ydotool`, lalu jalankan ulang agent (backend terdeteksi otomatis) |
 | Agent jalan tapi tidak mengetik (Linux) | Pastikan dijalankan dari sesi desktop (bukan SSH tanpa X) |
 | Tidak ada barcode masuk | Cek `VSCAN_CODE` di `agent.env` masih benar & sesi aktif (12 jam) |
 | Barcode dobel di 2 komputer | Satu kode pairing = satu komputer kasir; buat kode baru untuk kasir lain |
 | Jendela POS tidak terisi | Pastikan jendela POS adalah yang aktif (scanner fisik juga begitu) |
+
+## Wayland (GNOME/KDE modern) — cara khusus
+
+Sesi Wayland tidak punya file `~/.Xauthority`, jadi `pyautogui` tidak bisa
+mengetik. Agent otomatis memakai **`ydotool`** sebagai pengganti:
+
+```bash
+sudo apt install ydotool
+sudo systemctl enable --now ydotool   # daemon ydotool harus berjalan
+```
+
+Lalu jalankan ulang agent — baris `Backend: ydotool (Wayland)` menandakan
+berhasil. Bila pakai distro lain tanpa paket `ydotool`, gunakan sesi **X11**
+untuk login (pilih "GNOME on Xorg" di layar login) — backend `pyautogui`
+langsung jalan.

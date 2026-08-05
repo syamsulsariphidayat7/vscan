@@ -74,14 +74,15 @@ echo "  ✅ Python: $($PYTHON --version)"
 # 2. Paket sistem untuk pyautogui (Linux hanya)
 # -----------------------------------------------------------
 if [[ "$(uname -s)" == "Linux" ]]; then
-    echo "[2/6] Menginstall paket sistem pyautogui (scrot, xdotool, tk) ..."
+    echo "[2/6] Menginstall paket sistem (scrot, xdotool, tk, ydotool) ..."
     # Kegagalan di sini TIDAK mematikan instalasi: Python sudah ada & venv
-    # tetap dibuat; paket sistem hanya diperlukan agar pyautogui bisa mengetik.
+    # tetap dibuat; paket sistem hanya diperlukan agar agent bisa mengetik
+    # (pyautogui di X11; ydotool di Wayland).
     if command -v apt-get >/dev/null 2>&1; then
-        sudo apt-get update -qq && sudo apt-get install -y -qq scrot xdotool python3-tk python3-venv python3-xlib || \
-            echo "  ⚠️  Gagal install paket sistem (butuh sudo?) — lanjut; pyautogui mungkin tidak bisa mengetik."
+        sudo apt-get update -qq && sudo apt-get install -y -qq scrot xdotool python3-tk python3-venv python3-xlib ydotool || \
+            echo "  ⚠️  Gagal install paket sistem (butuh sudo?) — lanjut; agent mungkin tidak bisa mengetik."
     elif command -v dnf >/dev/null 2>&1; then
-        sudo dnf install -y scrot xdotool python3-tkinter || echo "  ⚠️  Gagal install paket sistem — lanjut."
+        sudo dnf install -y scrot xdotool python3-tkinter ydotool || echo "  ⚠️  Gagal install paket sistem — lanjut."
     elif command -v pacman >/dev/null 2>&1; then
         sudo pacman -Sy --noconfirm scrot xdotool tk || echo "  ⚠️  Gagal install paket sistem — lanjut."
     elif command -v apk >/dev/null 2>&1; then

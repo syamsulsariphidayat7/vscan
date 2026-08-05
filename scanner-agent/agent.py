@@ -13,11 +13,19 @@ Cara pakai:
     python agent.py --code KODE --dry-run        # cetak barcode, tanpa mengetik
 
 Konfigurasi juga bisa lewat env: VSCAN_URL, VSCAN_CODE, VSCAN_INTERVAL.
+
+Backend pengetikan (dipilih otomatis):
+  - pyautogui  → sesi X11 / XWayland (membutuhkan akses X; file Xauthority
+                 dicari otomatis di lokasi umum bila ~/.Xauthority tidak ada)
+  - ydotool    → sesi Wayland (install: sudo apt install ydotool, lalu
+                 sudo systemctl enable --now ydotool)
 """
 
 import argparse
 import json
 import os
+import shutil
+import subprocess
 import sys
 import time
 import urllib.error
@@ -49,6 +57,129 @@ def log(msg: str) -> None:
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
+def detect_xauthority() -> str | None:
+    """Cari file Xauthority yang valid untuk sesi X11 saat ini (mis. di
+    /run/user/UID/gdm/Xauthority), lalu set env XAUTHORITY. Mengembalikan path
+    bila ditemukan, selain None. Ini menyelesaikan error umum
+    '~/.Xauthority: No such file or directory' di desktop Linux."""
+    home = os.path.expanduser("~")
+    uid = os.getuid() if hasattr(os, "getuid") else 1000
+    candidates = [
+        os.environ.get("XAUTHORITY"),
+        os.path.join(home, ".Xauthority"),
+        f"/run/user/{uid}/gdm/Xauthority",
+        f"/run/user/{uid}/xauth/Xauthority",
+        "/var/run/gdm3-for-dm/Xauthority",
+    ]
+    for c in candidates:
+        if c and os.path.isfile(c):
+            os.environ["XAUTHORITY"] = c
+            return c
+    return None
+
+
+def describe_session() -> str:
+    """Diagnosa sesi saat ini — dipakai saat tidak ada backend pengetikan."""
+    keys = (
+        "XDG_SESSION_TYPE",
+        "XDG_SESSION_DESKTOP",
+        "DISPLAY",
+        "WAYLAND_DISPLAY",
+        "XAUTHORITY",
+    )
+    lines = []
+    for k in keys:
+        v = os.environ.get(k)
+        lines.append(f"  {k} = {v!r}" if v else f"  {k} = (kosong)")
+    return "\n".join(lines)
+
+
+def _type_with_pyautogui(pyautogui, barcode: str, enter: bool) -> None:
+    """Ketik via pyautogui (X11/XWayland) — kecepatan seperti scanner USB."""
+    pyautogui.typewrite(barcode, interval=0.002)
+    if enter:
+        pyautogui.press("enter")
+
+
+def _type_with_ydotool(barcode: str, enter: bool) -> None:
+    """Ketik via ydotool (Wayland). Butuh daemon ydotool berjalan:
+    sudo systemctl enable --now ydotool"""
+    subprocess.run(["ydotool", "type", "--key-delay", "10", barcode], check=True)
+    if enter:
+        subprocess.run(["ydotool", "key", "28"], check=True)  # KEY_ENTER
+
+
+# Backend terpilih (diisi select_typing_backend)
+_typing_impl = None
+_typing_name = ""
+
+
+def select_typing_backend(dry_run: bool) -> None:
+    """Pilih backend ketik otomatis: pyautogui (X11) → ydotool (Wayland).
+    Bila tidak ada yang bisa mengakses layar, cetak diagnosa & keluar."""
+    global _typing_impl, _typing_name
+    if dry_run:
+        _typing_name = "dry-run (tidak mengetik)"
+        return
+
+    # 1) pyautogui (X11 / XWayland)
+    try:
+        import pyautogui
+
+        _typing_impl = lambda b, e: _type_with_pyautogui(pyautogui, b, e)
+        _typing_name = "pyautogui (X11)"
+        return
+    except ImportError:
+        pass  # belum terinstall — lanjut ke ydotool / pesan jelas
+    except Exception:
+        # Xlib/XauthError: coba temukan Xauthority lalu import ulang.
+        found = detect_xauthority()
+        try:
+            import pyautogui
+
+            _typing_impl = lambda b, e: _type_with_pyautogui(pyautogui, b, e)
+            _typing_name = f"pyautogui (X11, XAUTHORITY={found})" if found else "pyautogui (X11)"
+            return
+        except Exception:
+            pass  # tetap gagal → coba ydotool
+
+    # 2) ydotool (Wayland)
+    if shutil.which("ydotool"):
+        _typing_impl = lambda b, e: _type_with_ydotool(b, e)
+        _typing_name = "ydotool (Wayland)"
+        return
+
+    # 3) Tidak ada backend — diagnosa yang bisa ditindaklanjuti.
+    print("❌ Tidak ada backend pengetikan yang bisa mengakses layar.", file=sys.stderr)
+    print(describe_session(), file=sys.stderr)
+    print(
+        "\nSolusi:",
+        file=sys.stderr,
+    )
+    print(
+        "  • Sesi X11  — jalankan agent dari terminal DI DESKTOP (bukan SSH).",
+        file=sys.stderr,
+    )
+    print(
+        "    File Xauthority dicari otomatis; cek manual:  echo $DISPLAY $XAUTHORITY",
+        file=sys.stderr,
+    )
+    print(
+        "  • Sesi Wayland — install ydotool agar agent bisa mengetik:",
+        file=sys.stderr,
+    )
+    print(
+        "      sudo apt install ydotool && sudo systemctl enable --now ydotool",
+        file=sys.stderr,
+    )
+    print(
+        "  • Library 'pyautogui' belum terpasang — install sekali:",
+        file=sys.stderr,
+    )
+    print("      pip install -r requirements.txt", file=sys.stderr)
+    sys.exit(2)
+
+
 def fetch_scans(url: str, code: str) -> list[dict]:
     """Ambil barcode baru dari VScan (claim-on-read di server, jadi aman
     di-poll berulang tanpa duplikat)."""
@@ -77,33 +208,6 @@ def fetch_scans(url: str, code: str) -> list[dict]:
     if not isinstance(scans, list):
         return []
     return [s for s in scans if isinstance(s, dict) and isinstance(s.get("barcode"), str)]
-
-
-def type_barcode(barcode: str, enter: bool) -> None:
-    """Ketik barcode ke OS seperti scanner fisik: teks + Enter (agar POS
-    langsung menambahkan item / submit field yang sedang fokus)."""
-    try:
-        import pyautogui
-
-        # Kecepatan ketik sangat cepat, persis karakter scanner USB.
-        pyautogui.typewrite(barcode, interval=0.002)
-        if enter:
-            pyautogui.press("enter")
-    except ImportError:
-        print(
-            "❌ Library 'pyautogui' belum terpasang.\n"
-            "   Install sekali:  pip install -r requirements.txt",
-            file=sys.stderr,
-        )
-        sys.exit(2)
-    except Exception as e:  # mis. tanpa sesi desktop (SSH): Xlib/XauthError
-        print(
-            f"❌ Tidak bisa mengakses layar untuk mengetik ({e}).\n"
-            "   Jalankan agent dari SESI DESKTOP komputer kasir (bukan SSH "
-            "tanpa layar).",
-            file=sys.stderr,
-        )
-        sys.exit(2)
 
 
 def load_known(path: str) -> set[str]:
@@ -147,32 +251,17 @@ def main() -> None:
     if not args.code:
         parser.error("Wajib isi kode pairing: --code KODE (atau env VSCAN_CODE)")
 
+    # Pilih backend ketik SEBELUM loop (gagal di sini = pesan jelas, bukan crash).
+    select_typing_backend(args.dry_run)
+
     log("─" * 56)
     log(f"VScan Scanner Agent — mode {'DRY-RUN (tidak mengetik)' if args.dry_run else 'MENGETIK KE OS'}")
     log(f"  Server : {args.url}")
     log(f"  Kode   : {args.code}")
     log(f"  Interval: {args.interval}s")
+    log(f"  Backend: {_typing_name}")
     log("  ✅ Arahkan kursor ke kolom autofocus POS (mis. kolom pencarian).")
     log("─" * 56)
-
-    if not args.dry_run:
-        try:
-            import pyautogui  # noqa: F401  (cek keberadaan di awal)
-        except ImportError:
-            print(
-                "❌ Library 'pyautogui' belum terpasang.\n"
-                "   Install sekali:  pip install -r requirements.txt",
-                file=sys.stderr,
-            )
-            sys.exit(2)
-        except Exception as e:  # mis. tanpa sesi desktop: Xlib/XauthError
-            print(
-                f"❌ Tidak bisa mengakses layar ({e}).\n"
-                "   Jalankan agent dari SESI DESKTOP komputer kasir "
-                "(bukan SSH tanpa layar).",
-                file=sys.stderr,
-            )
-            sys.exit(2)
 
     known = load_known(args.state)
     last_seen_warn = 0.0
@@ -200,7 +289,7 @@ def main() -> None:
             else:
                 log(f"📥 Ketik barcode: {barcode}")
                 try:
-                    type_barcode(barcode, args.enter)
+                    _typing_impl(barcode, args.enter)
                     log("   ✅ Dikirim ke OS")
                 except Exception as e:  # pragma: no cover - OS-specific
                     log(f"❌ Gagal mengetik: {e}")
