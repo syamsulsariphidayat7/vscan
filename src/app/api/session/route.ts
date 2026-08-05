@@ -171,12 +171,14 @@ export async function GET(req: Request) {
 }
 
 /**
- * Kelola sesi milik browser ini: perpanjang atau tutup.
+ * Kelola sesi: perpanjang atau tutup.
  *
  * PATCH /api/session
  * Body: { id, action: "extend" | "close" }
- *  - extend — perpanjang 12 jam dari sekarang (sesi harus milik owner)
- *  - close  — tutup sesi (status closed, scan ditolak)
+ *  - extend — perpanjang 12 jam dari sekarang (hanya sesi milik browser ini)
+ *  - close  — tutup sesi (status closed, scan ditolak). Boleh dari browser
+ *             mana pun: kode pairing sudah tampil publik & push/poll terbuka,
+ *             jadi hapus dari daftar konsisten dgn model keamanan tersebut.
  * Response 200: { ok: true, session: {...} } | 404 | 403
  */
 export async function PATCH(req: Request) {
@@ -185,9 +187,6 @@ export async function PATCH(req: Request) {
   const id = typeof body.id === "string" ? body.id : "";
   const action = body.action;
 
-  if (!ownerId) {
-    return NextResponse.json({ error: "Tidak ada sesi milik browser ini" }, { status: 403 });
-  }
   if (!id || (action !== "extend" && action !== "close")) {
     return NextResponse.json(
       { error: "Body harus berisi id dan action (extend | close)" },
@@ -199,9 +198,11 @@ export async function PATCH(req: Request) {
   if (!session) {
     return NextResponse.json({ error: "Sesi tidak ditemukan" }, { status: 404 });
   }
-  if (session.ownerId !== ownerId) {
+
+  // Perpanjang hanya boleh pemilik sesi (aksi pengelolaan milik sendiri).
+  if (action === "extend" && (!ownerId || session.ownerId !== ownerId)) {
     return NextResponse.json(
-      { error: "Sesi ini bukan milik browser Anda" },
+      { error: "Perpanjang hanya untuk sesi milik browser ini" },
       { status: 403 }
     );
   }

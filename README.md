@@ -54,8 +54,8 @@ Panduan lengkap: [`scanner-agent/README.md`](scanner-agent/README.md).
 
 | Halaman | Fungsi |
 |---|---|
-| `/` (landing HP) | Tombol **Scan** besar (lanjut kode terakhir / scan QR pairing) + daftar **"Proyek terhubung"** (klik = pair, auto-refresh 15 dtk) + tombol daftarkan proyek + **download Scanner Agent** |
-| `/register` | Daftar sesi pairing aktif — salin kode, **perpanjang / tutup** (hanya sesi milik browser ini) + **Download Scanner Agent** (ZIP untuk komputer kasir) |
+| `/` (landing HP) | Tombol **Scan** besar (buka kamera scan QR pairing) + daftar **"Proyek terhubung"** (klik = pair, tombol **hapus** di tiap sesi, auto-refresh 15 dtk) + tombol daftarkan proyek + **perintah curl Scanner Agent** |
+| `/register` | Daftar sesi pairing aktif — salin kode, **perpanjang / tutup** (hanya sesi milik browser ini) + **perintah curl Scanner Agent** |
 | `/scan` | Kamera scanner + log + status sesi + senter + wake lock |
 
 ## 🔌 API
@@ -68,10 +68,12 @@ Panduan lengkap: [`scanner-agent/README.md`](scanner-agent/README.md).
 | `POST /api/check` | Validasi kode HP. Body `{ code }` → `{ valid, reason }` |
 | `POST /api/push` | Terima scan HP. Body `{ code, barcode }` → simpan + kirim webhook → `201` |
 | `GET /api/poll` | Ambil barcode (claim-on-read). `?code=` → `{ scans: [{ id, barcode }] }` — token tidak diperlukan. **Auto-extend**: selama ada yang aktif polling, sesi diperpanjang +12 jam bila tersisa < 6 jam (sesi ditutup tidak dihidupkan) |
-| `GET /api/agent/download` | Unduh **Scanner Agent** sebagai ZIP (`vscan-agent.zip`) — isi = folder `scanner-agent/` di repo, selalu sinkron dengan versi terpasang |
+| `GET /api/agent/download` | (Opsional) Unduh **Scanner Agent** sebagai ZIP — cara utama install adalah **curl one-liner** di bagian Scanner Agent halaman `/` & `/register` |
 
 **Webhook** (bila `webhookUrl` diisi): VScan kirim `POST { code, scanId, barcode, token, timestamp }`
 ke URL tujuan; gagal → barcode tetap tersimpan dan bisa diambil via `/api/poll`.
+`PATCH /api/session` — `close` (hapus dari daftar) boleh dari browser mana pun;
+`extend` (perpanjang) hanya sesi milik browser ini.
 Keamanan: URL `localhost`/IP privat ditolak (anti-SSRF), rate limit 20 sesi/jam/IP,
 antrean maks 200 barcode/sesi.
 

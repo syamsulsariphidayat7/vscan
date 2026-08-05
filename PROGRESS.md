@@ -13,6 +13,19 @@ scanner USB, tanpa mengubah kode POS), atau via webhook/polling.
 
 ## Perubahan Terbaru
 
+### 🧹 Simplifikasi UX batch (2026-08-05)
+- **Unduh ZIP diganti curl**: tombol "Download vscan-agent.zip" di `/` & `/register`
+  diganti komponen `AgentInstall` (perintah curl one-liner Linux & Windows +
+  tombol salin). Endpoint `/api/agent/download` tetap ada (opsional).
+- **"Lanjutkan kode terakhir" dihapus**: tombol Scan selalu membuka kamera
+  scan QR pairing; tidak ada lagi auto-pair dari `localStorage`; link
+  "Lanjutkan dengan kode terakhir" dihapus.
+- **Hapus list dari browser mana pun**: tombol hapus kini muncul di SEMUA sesi
+  (bukan hanya milik sendiri); API `PATCH close` tidak lagi butuh cookie owner
+  (`extend` tetap hanya milik owner).
+- Pesan 403 di agent diperhalus (403 saat pergantian deploy Vercel = sementara,
+  agent mencoba lagi otomatis).
+
 ### ♾️ Auto-extend sesi saat agent polling (2026-08-05)
 - `/api/poll`: selama ada yang aktif polling (Scanner Agent), sesi diperpanjang
   otomatis +12 jam bila tersisa < 6 jam — sesi tak pernah kadaluarsa selama

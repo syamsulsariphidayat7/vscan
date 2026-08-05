@@ -11,17 +11,13 @@ import {
   ChevronRight,
   QrCode,
   RefreshCw,
-  History,
-  Download,
-  HardDriveDownload,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { checkPairingCode, checkReasonMessage } from "@/lib/api";
 import { useBarcodeDetector } from "@/hooks/use-barcode-detector";
 import { RegisterModal } from "@/components/register-modal";
-
-const LAST_CODE_KEY = "vscan-last-code";
+import { AgentInstall } from "@/components/agent-install";
 
 interface ProjectSession {
   id: string;
@@ -45,8 +41,7 @@ export default function HomePage() {
   const [loaded, setLoaded] = useState(false);
   const [registerOpen, setRegisterOpen] = useState(false);
   const [connecting, setConnecting] = useState(false);
-  const [lastCode, setLastCode] = useState<string | null>(null);
-  // Mode scan QR kode pairing (fallback bila kode tidak ada di daftar).
+  // Mode scan QR kode pairing.
   const [qrMode, setQrMode] = useState(false);
   const [qrDetected, setQrDetected] = useState(false);
   const qrDetectedRef = useRef(false);
@@ -64,7 +59,6 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    setLastCode(localStorage.getItem(LAST_CODE_KEY));
     loadSessions();
   }, [loadSessions]);
 
@@ -83,14 +77,13 @@ export default function HomePage() {
         toast.error(checkReasonMessage(result.reason));
         return;
       }
-      localStorage.setItem(LAST_CODE_KEY, code);
       router.push(`/scan?code=${encodeURIComponent(code)}`);
     } finally {
       setConnecting(false);
     }
   };
 
-  // Hapus sesi milik sendiri dari daftar (tutup sesi → hilang dari list aktif).
+  // Hapus sesi dari daftar (tutup sesi → hilang dari list aktif).
   const removeSession = async (s: ProjectSession) => {
     if (connecting) return;
     if (!window.confirm(`Hapus "${s.label}" (${s.code}) dari daftar?`)) return;
@@ -106,27 +99,17 @@ export default function HomePage() {
         return;
       }
       toast.success(`Sesi ${s.code} dihapus dari daftar`);
-      // Kalau sesi yang dihapus = kode terakhir tersimpan, bersihkan agar
-      // tombol Scan / "Lanjutkan" tidak mencoba pair kode yang sudah ditutup.
-      if (lastCode === s.code) {
-        localStorage.removeItem(LAST_CODE_KEY);
-        setLastCode(null);
-      }
       loadSessions();
     } catch {
       toast.error("Gagal menghapus sesi — coba lagi");
     }
   };
 
-  // Tombol Scan: lanjutkan kode terakhir; tanpa kode → scan QR pairing.
+  // Tombol Scan: selalu buka kamera untuk scan QR kode pairing.
   const handleScan = () => {
-    if (lastCode) {
-      pair(lastCode);
-    } else {
-      qrDetectedRef.current = false;
-      setQrDetected(false);
-      setQrMode(true);
-    }
+    qrDetectedRef.current = false;
+    setQrDetected(false);
+    setQrMode(true);
   };
 
   const handleQrDetect = (value: string) => {
@@ -241,7 +224,7 @@ export default function HomePage() {
               ) : (
                 <ScanLine className="h-6 w-6" aria-hidden="true" />
               )}
-              {connecting ? "Menghubungkan…" : lastCode ? "Scan" : "Scan (QR Kode)"}
+              {connecting ? "Menghubungkan…" : "Scan (QR Kode)"}
             </button>
 
             <button
@@ -293,116 +276,65 @@ export default function HomePage() {
             </div>
           ) : (
             <ul className="space-y-2">
-              {sessions.map((s) => {
-                const isConnected = lastCode === s.code;
-                return (
-                  <li key={s.id} className="flex items-stretch gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => pair(s.code)}
-                      disabled={connecting}
-                      className={
-                        "group flex min-w-0 flex-1 items-center gap-3 rounded-xl border px-3 py-3 text-left transition-all active:scale-[0.99] disabled:opacity-60 " +
-                        (isConnected
-                          ? "border-primary/50 bg-primary/5 hover:bg-primary/10"
-                          : "border-border bg-muted/50 hover:border-primary/40 hover:bg-muted")
-                      }
-                    >
-                      <div
-                        className={
-                          "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg " +
-                          (isConnected ? "bg-primary text-white" : "bg-primary-strong/10 text-primary")
-                        }
-                      >
-                        <Store className="h-5 w-5" aria-hidden="true" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="flex items-center gap-1.5 truncate text-sm font-medium">
-                          <span
-                            className="relative flex h-2 w-2 shrink-0"
-                            aria-hidden="true"
-                          >
-                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-                          </span>
-                          {s.label}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground">
-                          Kode {s.code} · hingga {formatExpiry(s.expiresAt)}
-                          {s.owned && (
-                            <span className="ml-1 rounded bg-primary/10 px-1 py-0.5 text-[9px] font-medium text-primary">
-                              milik saya
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-1.5">
-                        <span className="flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-600 dark:text-emerald-400">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
-                          Aktif
+              {sessions.map((s) => (
+                <li key={s.id} className="flex items-stretch gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => pair(s.code)}
+                    disabled={connecting}
+                    className="group flex min-w-0 flex-1 items-center gap-3 rounded-xl border border-border bg-muted/50 px-3 py-3 text-left transition-all hover:border-primary/40 hover:bg-muted active:scale-[0.99] disabled:opacity-60"
+                  >
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-strong/10 text-primary">
+                      <Store className="h-5 w-5" aria-hidden="true" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="flex items-center gap-1.5 truncate text-sm font-medium">
+                        <span
+                          className="relative flex h-2 w-2 shrink-0"
+                          aria-hidden="true"
+                        >
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
                         </span>
-                        {isConnected && (
-                          <span className="rounded bg-primary px-1.5 py-0.5 text-[9px] font-semibold text-white">
-                            Terhubung
+                        {s.label}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">
+                        Kode {s.code} · hingga {formatExpiry(s.expiresAt)}
+                        {s.owned && (
+                          <span className="ml-1 rounded bg-primary/10 px-1 py-0.5 text-[9px] font-medium text-primary">
+                            milik saya
                           </span>
                         )}
-                      </div>
-                      <ChevronRight
-                        className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
-                        aria-hidden="true"
-                      />
-                    </button>
-                    {s.owned && (
-                      <button
-                        type="button"
-                        onClick={() => removeSession(s)}
-                        disabled={connecting}
-                        className="flex w-11 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/50 text-muted-foreground transition-all hover:border-red-300 hover:bg-red-50 hover:text-red-600 active:scale-[0.98] disabled:opacity-50 dark:hover:border-red-800 dark:hover:bg-red-950/40 dark:hover:text-red-400"
-                        title="Hapus sesi dari daftar"
-                        aria-label={`Hapus sesi ${s.label}`}
-                      >
-                        <Trash2 className="h-4 w-4" aria-hidden="true" />
-                      </button>
-                    )}
-                  </li>
-                );
-              })}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <span className="flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-600 dark:text-emerald-400">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+                        Aktif
+                      </span>
+                    </div>
+                    <ChevronRight
+                      className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
+                      aria-hidden="true"
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeSession(s)}
+                    disabled={connecting}
+                    className="flex w-11 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/50 text-muted-foreground transition-all hover:border-red-300 hover:bg-red-50 hover:text-red-600 active:scale-[0.98] disabled:opacity-50 dark:hover:border-red-800 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                    title="Hapus sesi dari daftar"
+                    aria-label={`Hapus sesi ${s.label}`}
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </li>
+              ))}
             </ul>
           )}
         </section>
 
-        {/* Download Scanner Agent untuk komputer kasir */}
-        <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-          <div className="flex items-center gap-1.5 pb-1">
-            <HardDriveDownload className="h-4 w-4 text-primary" aria-hidden="true" />
-            <h2 className="text-sm font-semibold">Scanner Agent — komputer kasir</h2>
-          </div>
-          <p className="pb-3 text-xs text-muted-foreground">
-            Install sekali di komputer kasir agar barcode hasil scan HP otomatis
-            diketik ke POS.
-          </p>
-          <a
-            href="/api/agent/download"
-            download="vscan-agent.zip"
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-border bg-muted/50 text-sm font-semibold text-foreground transition-all hover:bg-muted active:scale-[0.98]"
-          >
-            <Download className="h-4 w-4 text-primary" aria-hidden="true" />
-            Download vscan-agent.zip
-          </a>
-        </section>
-
-        {lastCode && !qrMode && (
-          <button
-            type="button"
-            onClick={() => pair(lastCode)}
-            disabled={connecting}
-            className="mx-auto flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
-          >
-            <History className="h-3 w-3" aria-hidden="true" />
-            Lanjutkan dengan kode terakhir:{" "}
-            <span className="font-mono font-semibold tracking-wider">{lastCode}</span>
-          </button>
-        )}
+        <AgentInstall />
 
         <p className="flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
           <QrCode className="h-3 w-3" aria-hidden="true" />
