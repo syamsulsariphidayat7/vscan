@@ -35,7 +35,9 @@ import urllib.parse
 import urllib.request
 from datetime import datetime
 
-AGENT_VERSION = "2.1"  # tampil di banner startup; naikkan tiap update penting
+AGENT_VERSION = "2.2"  # tampil di banner startup; naikkan tiap update penting
+
+_VK_RETURN = 0x0D  # VK code tombol Enter (Windows)
 
 POLL_TIMEOUT = 15  # detik, timeout HTTP tiap polling (long-poll menahan ~6s)
 TYPEWRITE_INTERVAL = 0.02  # detik antar karakter barcode
@@ -168,9 +170,9 @@ def _enter_scan_code() -> int:
     try:
         import ctypes
 
-        return int(ctypes.windll.user32.MapVirtualKeyW(0x0D, 0))  # VK_RETURN
+        return int(ctypes.windll.user32.MapVirtualKeyW(_VK_RETURN, 0))
     except Exception:
-        return 0x1C
+        return 0x1C  # fallback: scancode Enter keyboard standar
 
 
 def _press_enter_windows() -> bool:
@@ -202,6 +204,47 @@ def _press_enter(pyautogui) -> None:
     pyautogui.keyUp("enter")
 
 
+def _enter_is_down_windows() -> bool:
+    """(Windows) True bila tombol Enter masih terdeteksi 'tertekan' oleh OS
+    (GetAsyncKeyState). Ini state yang sama yang membuat Enter fisik mati
+    saat keyup sebelumnya hilang."""
+    try:
+        import ctypes
+
+        return bool(ctypes.windll.user32.GetAsyncKeyState(_VK_RETURN) & 0x8000)
+    except Exception:
+        return False
+
+
+def _ensure_enter_released(log_fail: bool = True) -> bool:
+    """(Windows) Verifikasi Enter benar-benar terlepas setelah pengetikan.
+
+    Bila keyup sebelumnya hilang (tombol masih 'tertekan' → spam enter &
+    Enter fisik mati), kirim keyup scancode berulang sampai bersih, lalu
+    log peringatan bila masih nyangkut. Di platform selain Windows selalu
+    mengembalikan True.
+    """
+    if sys.platform != "win32":
+        return True
+    sender = _get_win_sender()
+    if not sender:
+        return True  # tidak bisa diperiksa → jangan ganggu alur normal
+    scan = _enter_scan_code()
+    time.sleep(0.05)  # tunggu event keyup sebelumnya benar-benar diproses
+    # Catatan: bila kasir sedang FISIK memegang tombol Enter saat cek ini,
+    # keyup scancode akan melepasnya — kasus sangat jarang, loop dibatasi 5×.
+    for _attempt in range(5):
+        if not _enter_is_down_windows():
+            return True
+        sender(scan, False)  # keyup ulang via scancode
+        time.sleep(0.05)
+    if log_fail:
+        log("⚠️  Enter masih terdeteksi 'tertekan' setelah 5× keyup — kemungkinan "
+            "ada software keyboard remapper (PowerToys/SharpKeys) atau driver "
+            "keyboard bermasalah di komputer kasir.")
+    return False
+
+
 def _type_with_pyautogui(pyautogui, barcode: str, enter: bool) -> None:
     """Ketik via pyautogui (X11/XWayland/Windows) — seperti scanner USB.
 
@@ -224,6 +267,8 @@ def _type_with_pyautogui(pyautogui, barcode: str, enter: bool) -> None:
         # Jamin tidak ada tombol tertahan (mis. proses berhenti di tengah
         # ketikan) — mencegah keyboard fisik 'nyangkut' setelah ini.
         release_keys(pyautogui)
+        # Windows: verifikasi Enter benar-benar terlepas (cek state OS).
+        _ensure_enter_released()
 
 
 def _type_with_ydotool(barcode: str, enter: bool) -> None:
@@ -288,10 +333,16 @@ def select_typing_backend(dry_run: bool) -> None:
         _typing_name = "dry-run (tidak mengetik)"
         return
 
-    # 1) pyautogui (X11 / XWayland)
+    # 1) pyautogui (X11 / XWayland / Windows)
     try:
         import pyautogui
 
+        # PAUSE bawaan pyautogui = 0,1 s PER panggilan — membuat release_keys
+        # (~20 keyUp) makan ~2 s tiap scan. Kecilkan agar tidak menambah delay.
+        try:
+            pyautogui.PAUSE = 0.01
+        except Exception:
+            pass
         _typing_impl = lambda b, e: _type_with_pyautogui(pyautogui, b, e)
         _typing_name = "pyautogui (X11)"
         return
@@ -450,6 +501,12 @@ def main() -> None:
         # tengah ketikan (penyebab tombol Enter fisik kadang 'nyangkut').
         release_keys()
         log("⌨️  State keyboard di-reset (tombol yang mungkin nyangkut dibersihkan).")
+        if sys.platform == "win32":
+            if _ensure_enter_released(log_fail=False):
+                log("   Enter terdeteksi terlepas ✅")
+            else:
+                log("   ⚠️  Enter masih 'tertekan' — cek software keyboard remapper "
+                    "(PowerToys/SharpKeys) di komputer kasir.")
     log("─" * 56)
 
     known = load_known(args.state)

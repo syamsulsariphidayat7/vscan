@@ -13,6 +13,21 @@ scanner USB, tanpa mengubah kode POS), atau via webhook/polling.
 
 ## Perubahan Terbaru
 
+### ⌨️ Fix #3: verifikasi otomatis Enter terlepas (GetAsyncKeyState) — v2.2 (2026-08-06)
+- **Permintaan user**: agent mengecek sendiri apakah Enter benar-benar
+  terlepas setelah scan (bukan hanya mengirim keyup).
+- **Implementasi** di `scanner-agent/agent.py` v2.2:
+  - `_enter_is_down_windows()` — `GetAsyncKeyState(VK_RETURN) & 0x8000`:
+    deteksi state Enter di level OS (state yang sama yang membuat Enter
+    fisik mati saat keyup hilang).
+  - `_ensure_enter_released()` — dipanggil di **akhir setiap scan**
+    (finally) & saat **startup**: bila Enter masih terdeteksi tertekan,
+    kirim keyup scancode ulang (maks 5×) sampai bersih; log peringatan
+    "Enter masih tertekan — cek remapper (PowerToys/SharpKeys)" bila
+    tetap nyangkut. Platform selain Windows → langsung True.
+  - Banner startup: cek Enter → "Enter terdeteksi terlepas ✅" / peringatan.
+- **Update kasir**: curl install ulang; cek banner `v2.2`.
+
 ### ⌨️ Fix #2: Enter di Windows via scancode SendInput + AGENT_VERSION (2026-08-06)
 - **Gejala berlanjut**: spam enter & Enter fisik mati setelah scan, walau
   sudah dipakai keyDown/tahan/keyUp eksplisit. Petunjuk kunci dari user:
