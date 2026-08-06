@@ -1,6 +1,6 @@
 # PROGRESS — VScan
 
-## Status Terakhir (2026-08-05)
+## Status Terakhir (2026-08-07)
 
 **VScan = HP jadi scanner barcode nirkabel untuk proyek/POS apa pun.** HP
 menscan barcode → VScan (server mandiri + DB Neon) → hasil scan masuk POS
@@ -10,6 +10,15 @@ scanner USB, tanpa mengubah kode POS), atau via webhook/polling.
 - **Live**: https://vscan.boundless.my.id (project Vercel `vscan`, auto-deploy dari `main`)
 - **DB**: Neon Postgres — `DATABASE_URL` sudah di-set di Vercel (integrasi Vercel Postgres/Neon), migrasi `init` + `add_owner_id` sudah diterapkan
 - **PWA**: service worker network-first utk navigasi + cache `vscan-shell-v2` (update selalu ter-deliver)
+
+### 📘 AGENTS.md dibuat (2026-08-07)
+- File panduan agent AI di root: ringkasan arsitektur (alur push→poll,
+  claim-on-read, long-poll), konvensi stack & bahasa (ID), workflow
+  (PROGRESS → tanya user → implement → update PROGRESS/README → commit
+  konvensi → build/lint), dan gotcha (Cloudflare 403, Enter nyangkut,
+  Vercel Hobby latensi, jangan restore webhook).
+- Repo diverifikasi sinkron: `origin/main` = `0b6f6ce` (agent v2.4),
+  tidak ada commit belum ter-push; `AGENT_VERSION = "2.4"` terkonfirmasi.
 
 ## Perubahan Terbaru
 
