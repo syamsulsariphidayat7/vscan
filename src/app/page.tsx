@@ -83,10 +83,15 @@ export default function HomePage() {
     }
   };
 
-  // Hapus sesi dari daftar (tutup sesi → hilang dari list aktif).
+  // Hapus sesi PERMANEN (termasuk antrean barcode-nya — tidak bisa dibatalkan).
   const removeSession = async (s: ProjectSession) => {
     if (connecting) return;
-    if (!window.confirm(`Hapus "${s.label}" (${s.code}) dari daftar?`)) return;
+    if (
+      !window.confirm(
+        `Hapus permanen "${s.label}" (${s.code})? Sesi & seluruh barcode yang belum diambil akan hilang selamanya.`
+      )
+    )
+      return;
     try {
       const res = await fetch("/api/session", {
         method: "PATCH",
@@ -98,7 +103,7 @@ export default function HomePage() {
         toast.error(typeof data.error === "string" ? data.error : "Gagal menghapus sesi");
         return;
       }
-      toast.success(`Sesi ${s.code} dihapus dari daftar`);
+      toast.success(`Sesi ${s.code} dihapus permanen`);
       loadSessions();
     } catch {
       toast.error("Gagal menghapus sesi — coba lagi");
@@ -323,8 +328,8 @@ export default function HomePage() {
                     onClick={() => removeSession(s)}
                     disabled={connecting}
                     className="flex w-11 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/50 text-muted-foreground transition-all hover:border-red-300 hover:bg-red-50 hover:text-red-600 active:scale-[0.98] disabled:opacity-50 dark:hover:border-red-800 dark:hover:bg-red-950/40 dark:hover:text-red-400"
-                    title="Hapus sesi dari daftar"
-                    aria-label={`Hapus sesi ${s.label}`}
+                    title="Hapus permanen sesi (termasuk barcode)"
+                    aria-label={`Hapus permanen sesi ${s.label}`}
                   >
                     <Trash2 className="h-4 w-4" aria-hidden="true" />
                   </button>

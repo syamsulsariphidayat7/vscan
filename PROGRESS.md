@@ -11,6 +11,21 @@ scanner USB, tanpa mengubah kode POS), atau via webhook/polling.
 - **DB**: Neon Postgres — `DATABASE_URL` sudah di-set di Vercel (integrasi Vercel Postgres/Neon), migrasi `init` + `add_owner_id` sudah diterapkan
 - **PWA**: service worker network-first utk navigasi + cache `vscan-shell-v2` (update selalu ter-deliver)
 
+### 🗑️ Tombol hapus = HARD DELETE (bukan soft delete lagi) (2026-08-07)
+- **Keputusan user**: "hapus" sesi di landing `/` & `/register` kini **menghapus
+  permanen** dari DB — bukan sekadar set `status: "closed"`.
+- **Implementasi**: `PATCH /api/session` action `close` → `prisma.scanSession
+  .delete()` — seluruh `PendingScan` terhapus otomatis via **ON DELETE
+  CASCADE** (FK sudah cascade sejak migrasi `init`, jadi tanpa migrasi baru).
+- **Izin**: tetap boleh dari **browser mana pun** (keputusan user) — konsisten
+  dgn model lama; konsekuensi: siapa pun yang tahu `id` sesi bisa hapus
+  permanen. `extend` tetap hanya milik owner.
+- **UI**: konfirmasi di landing & `/register` dipertegas ("Hapus permanen…
+  tidak bisa dibatalkan"); `/register` tombol "Tutup sesi" diganti ikon
+  sampah + sesi langsung hilang dari daftar setelah dihapus.
+- Status `closed` masih dipakai untuk **kedaluwarsa otomatis** (lazy-close di
+  `lookupActiveSession`) — itu jalur terpisah, bukan tombol hapus.
+
 ### 🧪 Smoke test agent + verifikasi build produksi (2026-08-07)
 - **`scanner-agent/smoke_test.py`** (baru): smoke test end-to-end tanpa
   internet — mock server `/api/poll` lokal → jalankan `agent.py --dry-run`

@@ -139,15 +139,17 @@ export async function GET(req: Request) {
 }
 
 /**
- * Kelola sesi: perpanjang atau tutup.
+ * Kelola sesi: perpanjang atau HAPUS PERMANEN.
  *
  * PATCH /api/session
  * Body: { id, action: "extend" | "close" }
  *  - extend — perpanjang 12 jam dari sekarang (hanya sesi milik browser ini)
- *  - close  — tutup sesi (status closed, scan ditolak). Boleh dari browser
- *             mana pun: kode pairing sudah tampil publik & push/poll terbuka,
- *             jadi hapus dari daftar konsisten dgn model keamanan tersebut.
- * Response 200: { ok: true, session: {...} } | 404 | 403
+ *  - close  — HAPUS PERMANEN sesi + seluruh antrean barcode-nya (cascade).
+ *             Boleh dari browser mana pun: kode pairing sudah tampil publik
+ *             & push/poll terbuka, jadi hapus konsisten dgn model keamanan
+ *             tersebut. TIDAK BISA DIBATALKAN.
+ * Response 200: { ok: true, session: {...} } (extend)
+ *             | { ok: true, deleted: true, id } (close) | 404 | 403
  */
 export async function PATCH(req: Request) {
   const ownerId = getOwnerId(req);
@@ -175,28 +177,33 @@ export async function PATCH(req: Request) {
     );
   }
 
-  const updated =
-    action === "extend"
-      ? await prisma.scanSession.update({
-          where: { id },
-          data: {
-            status: "active",
-            expiresAt: new Date(Date.now() + SESSION_TTL_MS),
-          },
-        })
-      : await prisma.scanSession.update({
-          where: { id },
-          data: { status: "closed" },
-        });
+  if (action === "extend") {
+    const updated = await prisma.scanSession.update({
+      where: { id },
+      data: {
+        status: "active",
+        expiresAt: new Date(Date.now() + SESSION_TTL_MS),
+      },
+    });
+    return NextResponse.json({
+      ok: true,
+      session: {
+        id: updated.id,
+        code: updated.code,
+        label: updated.label,
+        status: updated.status,
+        expiresAt: updated.expiresAt.toISOString(),
+      },
+    });
+  }
 
-  return NextResponse.json({
-    ok: true,
-    session: {
-      id: updated.id,
-      code: updated.code,
-      label: updated.label,
-      status: updated.status,
-      expiresAt: updated.expiresAt.toISOString(),
-    },
-  });
+  // close → HARD DELETE. PendingScan terhapus otomatis via ON DELETE CASCADE
+  // (FK PendingScan.sessionId di migrasi init sudah cascade). Pakai deleteMany
+  // agar idempoten: kalau sesi sudah dihapus request lain (double-click, dua
+  // tab), tidak throw P2025 → cukup balas 404.
+  const deleted = await prisma.scanSession.deleteMany({ where: { id } });
+  if (deleted.count === 0) {
+    return NextResponse.json({ error: "Sesi tidak ditemukan" }, { status: 404 });
+  }
+  return NextResponse.json({ ok: true, deleted: true, id });
 }

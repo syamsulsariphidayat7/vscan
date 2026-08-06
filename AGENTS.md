@@ -48,8 +48,10 @@ HP (kamera) ──push──► VScan (vscan.boundless.my.id) ──poll──�
 - **Rate limit** `POST /api/session`: 20 sesi/jam/IP (in-memory, per instance
   Vercel). Cookie `vscan_owner` (HttpOnly, 1 tahun) menandai sesi milik browser.
 - **Model keamanan (disengaja)**: kode pairing tampil publik & `push`/`poll`
-  terbuka dengan kode saja → siapa pun bisa push ke sesi mana pun. Aman utk
-  jaringan kasir internal; kalau dipakai publik terbuka, pertimbangkan PIN pair.
+  terbuka dengan kode saja → siapa pun bisa push ke sesi mana pun, dan
+  `PATCH close` (**hard delete** sejak 2026-08-07) bisa dipanggil siapa pun
+  yang tahu `id` sesi. Aman utk jaringan kasir internal; kalau dipakai
+  publik terbuka, pertimbangkan PIN pair.
 
 ### API ringkas
 
@@ -57,7 +59,7 @@ HP (kamera) ──push──► VScan (vscan.boundless.my.id) ──poll──�
 |---|---|
 | `POST /api/session` `{label}` | Daftar proyek → `201 {id, code, label, expiresAt}` + cookie owner |
 | `GET /api/session` | List publik semua sesi aktif `{sessions:[{..., owned}]}` |
-| `PATCH /api/session` `{id, action}` | `extend` (hanya owner, 403 utk non-owner) / `close` (boleh siapa pun) |
+| `PATCH /api/session` `{id, action}` | `extend` (hanya owner, 403 utk non-owner) / `close` = **hard delete** (hapus permanen sesi + antrean barcode via cascade, boleh siapa pun) |
 | `POST /api/check` `{code}` | Validasi kode HP → `{valid, reason, expiresAt?}` |
 | `POST /api/push` `{code, barcode}` | Simpan scan HP → `201 {ok, id}` (validasi barcode `[A-Za-z0-9]{3,64}`) |
 | `GET /api/poll?code=KODE&longpoll=1` | Claim-on-read barcode → `{scans:[{id, barcode}]}` + auto-extend |

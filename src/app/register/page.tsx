@@ -7,7 +7,7 @@ import {
   Copy,
   ScanLine,
   RefreshCw,
-  PowerOff,
+  Trash2,
   QrCode,
   Plus,
 } from "lucide-react";
@@ -85,6 +85,17 @@ export default function RegisterPage() {
 
   const actOnSession = useCallback(
     async (id: string, action: "extend" | "close") => {
+      // Hapus permanen butuh konfirmasi eksplisit (tidak bisa dibatalkan).
+      if (action === "close") {
+        const target = sessions.find((s) => s.id === id);
+        const label = target ? `"${target.label}" (${target.code})` : "sesi ini";
+        if (
+          !window.confirm(
+            `Hapus permanen ${label}? Sesi & seluruh barcode yang belum diambil akan hilang selamanya.`
+          )
+        )
+          return;
+      }
       setActingId(id);
       try {
         const res = await fetch("/api/session", {
@@ -97,23 +108,29 @@ export default function RegisterPage() {
           toast.error(typeof data.error === "string" ? data.error : "Gagal");
           return;
         }
-        toast.success(action === "extend" ? "Sesi diperpanjang 12 jam" : "Sesi ditutup");
-        setSessions((prev) =>
-          prev.map((s) =>
-            s.id === id
-              ? {
-                  ...s,
-                  status: data.session.status,
-                  expiresAt: data.session.expiresAt,
-                }
-              : s
-          )
-        );
+        if (action === "close") {
+          toast.success("Sesi dihapus permanen");
+          // Sesi sudah hilang dari DB → hilangkan juga dari daftar lokal.
+          setSessions((prev) => prev.filter((s) => s.id !== id));
+        } else {
+          toast.success("Sesi diperpanjang 12 jam");
+          setSessions((prev) =>
+            prev.map((s) =>
+              s.id === id
+                ? {
+                    ...s,
+                    status: data.session.status,
+                    expiresAt: data.session.expiresAt,
+                  }
+                : s
+            )
+          );
+        }
       } finally {
         setActingId(null);
       }
     },
-    []
+    [sessions]
   );
 
   return (
@@ -227,10 +244,10 @@ export default function RegisterPage() {
                               onClick={() => actOnSession(s.id, "close")}
                               disabled={actingId === s.id}
                               className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition-colors hover:bg-red-100 disabled:opacity-50 dark:border-red-800 dark:bg-red-950/40 dark:text-red-400"
-                              aria-label={`Tutup sesi ${s.code}`}
-                              title="Tutup sesi"
+                              aria-label={`Hapus permanen sesi ${s.code}`}
+                              title="Hapus permanen (termasuk barcode)"
                             >
-                              <PowerOff className="h-3.5 w-3.5" aria-hidden="true" />
+                              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                             </button>
                           )}
                         </>

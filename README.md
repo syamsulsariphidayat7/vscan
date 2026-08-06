@@ -82,14 +82,15 @@ versi terbaru, **`agent.env` kode pairing tetap dipertahankan**). Versi terbaru:
 |---|---|
 | `POST /api/session` | Daftarkan proyek. Body `{ label }` → `201 { id, code, label, expiresAt }` |
 | `GET /api/session` | List **semua sesi aktif** (publik): `{ sessions: [{ id, code, label, status, expiresAt, owned }] }` |
-| `PATCH /api/session` | Kelola sesi milik sendiri. Body `{ id, action: "extend"\|"close" }` |
+| `PATCH /api/session` | Kelola sesi. Body `{ id, action: "extend"\|"close" }` — `extend` hanya sesi milik sendiri; `close` = **hapus permanen** (termasuk antrean barcode, tidak bisa dibatalkan) |
 | `POST /api/check` | Validasi kode HP. Body `{ code }` → `{ valid, reason }` |
 | `POST /api/push` | Terima scan HP. Body `{ code, barcode }` → simpan + kirim webhook → `201` |
 | `GET /api/poll` | Ambil barcode (claim-on-read). `?code=` → `{ scans: [{ id, barcode }] }` — token tidak diperlukan. `?longpoll=1` → server menahan koneksi ~6 dtk & balas seketika saat barcode masuk (dipakai Scanner Agent). **Auto-extend**: selama ada yang aktif polling, sesi diperpanjang +12 jam bila tersisa < 6 jam (sesi ditutup tidak dihidupkan) |
 | `GET /api/agent/download` | (Opsional) Unduh **Scanner Agent** sebagai ZIP — cara utama install adalah **curl one-liner** di bagian Scanner Agent halaman `/` & `/register` |
 
-`PATCH /api/session` — `close` (hapus dari daftar) boleh dari browser mana pun;
-`extend` (perpanjang) hanya sesi milik browser ini.
+`PATCH /api/session` — `close` = **hapus permanen** (sesi + antrean barcode,
+via ON DELETE CASCADE) boleh dari browser mana pun; `extend` (perpanjang)
+hanya sesi milik browser ini.
 Keamanan: rate limit 20 sesi/jam/IP, antrean maks 200 barcode/sesi,
 sesi auto-extend selama ada yang aktif polling.
 
