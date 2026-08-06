@@ -42,6 +42,12 @@ agent ke `%USERPROFILE%\vscan-agent` → virtualenv + pyautogui → kode pairing
 
 ### Langkah 1 — Konfigurasi (sekali)
 
+**Cara A — biarkan agent bertanya (v2.5+, paling mudah):** langsung jalankan
+agent dari terminal (tanpa `agent.env`). Agent akan bertanya
+**"Masukkan kode pairing:"** — ketik kode, divalidasi otomatis ke server, dan
+**disimpan sendiri ke `agent.env`**. Tidak perlu buka editor sama sekali.
+
+**Cara B — isi manual:**
 1. Salin `agent.env.example` menjadi **`agent.env`** (di folder yang sama).
 2. Buka `agent.env` dengan Notepad/editor, isi kode pairing:
    ```
@@ -83,7 +89,8 @@ Scan dari HP → muncul `📥 [DRY-RUN] barcode diterima: 8991...` → berhenti 
 | `--interval 0.5` | Polling lebih cepat (default 1 detik) |
 | `--no-enter` | Jangan tekan Enter setelah barcode |
 | `--dry-run` | Mode tes: cetak barcode tanpa mengetik ke OS |
-| `--code KODE` | Kode pairing (mengalahkan `agent.env`) |
+| `--code KODE` | Kode pairing (mengalahkan `agent.env` & prompt) |
+| (tanpa `--code`) | **Prompt interaktif v2.5+**: minta kode di terminal, validasi, simpan ke `agent.env` |
 | `--url URL` | Server VScan (default https://vscan.boundless.my.id) |
 
 ## Troubleshooting

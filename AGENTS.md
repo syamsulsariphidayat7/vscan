@@ -70,9 +70,13 @@ HP (kamera) ──push──► VScan (vscan.boundless.my.id) ──poll──�
 Python murni (std-lib + pyautogui), polling long-poll → ketik barcode + Enter
 ke OS. **Ini bagian paling rapuh proyek — riwayat bug panjang soal Enter.**
 
-- **Versi**: `AGENT_VERSION = "2.4"` (tampil di banner startup). **Naikkan
+- **Versi**: `AGENT_VERSION = "2.5"` (tampil di banner startup). **Naikkan
   patch tiap perubahan perilaku**; update kasir = jalankan ulang curl install
   (idempoten, `agent.env` dipertahankan). Cek versi via banner.
+- **Input kode pairing tanpa edit manual (v2.5+)**: saat start tanpa kode &
+  stdin interaktif, agent meminta kode, memvalidasi ke `POST /api/check`,
+  lalu **menyimpan otomatis ke `agent.env`** (`save_code_to_env` — baris lain
+  dipertahankan). Non-tty (auto-start) → prompt dilewati, error lama tetap.
 - **Backend ketik dipilih otomatis**:
   - **Wayland** → `ydotool` (uinput): ketik `type --key-delay 10`, Enter pakai
     `key -d 80 28` (down→jeda→up) + safety-net `key 28:0`. `_ydotool_ready()`

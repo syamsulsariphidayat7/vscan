@@ -19,6 +19,7 @@ perintah python3) — jalankan di mesin pengembangan, bukan di kasir.
 """
 
 import http.server
+import importlib.util
 import json
 import os
 import queue
@@ -56,9 +57,19 @@ def wait_for(cond, timeout: float, label: str) -> bool:
     return False
 
 
-# --- Mock server /api/poll -------------------------------------------------
+# --- Mock server /api/poll + /api/check ------------------------------------
 class MockHandler(http.server.BaseHTTPRequestHandler):
     scans: "queue.Queue[dict]" = queue.Queue()
+    # Kode yang dianggap valid oleh /api/check (selain TEST_CODE).
+    valid_codes: set = {TEST_CODE}
+
+    def _json(self, obj: dict, status: int = 200) -> None:
+        body = json.dumps(obj).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def do_GET(self) -> None:
         if not self.path.startswith("/api/poll"):
@@ -69,12 +80,22 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
             scans = [item]
         except queue.Empty:
             scans = []
-        body = json.dumps({"scans": scans}).encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        self._json({"scans": scans})
+
+    def do_POST(self) -> None:
+        if not self.path.startswith("/api/check"):
+            self.send_error(404)
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            data = json.loads(self.rfile.read(length).decode("utf-8")) if length else {}
+        except (json.JSONDecodeError, ValueError):
+            data = {}
+        code = str(data.get("code", "")).upper()
+        if code in MockHandler.valid_codes:
+            self._json({"valid": True, "expiresAt": "2099-01-01T00:00:00Z"})
+        else:
+            self._json({"valid": False, "reason": "not_found"})
 
     def log_message(self, *args) -> None:  # heningkan log request
         pass
@@ -92,11 +113,43 @@ def main() -> int:
     if r.returncode != 0:
         print(r.stderr)
 
-    print("2. Jalankan agent --dry-run terhadap mock /api/poll")
+    # Mock server dipakai dari sini (validasi kode + polling agent).
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), MockHandler)
     port = server.server_address[1]
     threading.Thread(target=server.serve_forever, daemon=True).start()
 
+    print("2. Fitur input kode pairing (interaktif): validasi + simpan agent.env")
+    # Import agent.py sebagai modul (tidak menjalankan main) untuk menguji
+    # check_pairing_code & save_code_to_env langsung terhadap mock server.
+    spec = importlib.util.spec_from_file_location("vscan_agent", AGENT_PY)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    # 2a. Kode valid → check_pairing_code True.
+    ok_v, _ = mod.check_pairing_code(f"http://127.0.0.1:{port}", TEST_CODE)
+    check(ok_v, "check_pairing_code: kode valid diterima")
+
+    # 2b. Kode salah → False + alasan.
+    ok_b, msg_b = mod.check_pairing_code(f"http://127.0.0.1:{port}", "WRONG1")
+    check(not ok_b and "tidak ditemukan" in msg_b, "check_pairing_code: kode salah ditolak + alasan")
+
+    # 2c. save_code_to_env menulis/update VSCAN_CODE, baris lain dipertahankan.
+    env_file = os.path.join(tempfile.gettempdir(), "vscan-smoke-env.txt")
+    with open(env_file, "w", encoding="utf-8") as f:
+        f.write("VSCAN_URL=https://vscan.boundless.my.id\nVSCAN_INTERVAL=1\n")
+    mod.save_code_to_env(TEST_CODE, env_file)
+    with open(env_file, "r", encoding="utf-8") as f:
+        content = f.read()
+    check(
+        f"VSCAN_CODE={TEST_CODE}" in content
+        and "VSCAN_URL=https://vscan.boundless.my.id" in content
+        and "VSCAN_INTERVAL=1" in content,
+        "save_code_to_env: VSCAN_CODE ditulis, baris lain dipertahankan",
+    )
+    os.remove(env_file)
+
+    print("3. Jalankan agent --dry-run terhadap mock /api/poll")
     state_file = os.path.join(tempfile.gettempdir(), "vscan-smoke-state.json")
     if os.path.exists(state_file):
         os.remove(state_file)
@@ -202,7 +255,7 @@ def main() -> int:
         for f in _failures:
             print(f"   - {f}")
         return 1
-    print("✅ SMOKE TEST LULUS — agent.py dry-run berfungsi.")
+    print("✅ SMOKE TEST LULUS — agent.py (dry-run + input kode pairing) berfungsi.")
     return 0
 
 

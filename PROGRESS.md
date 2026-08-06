@@ -11,6 +11,28 @@ scanner USB, tanpa mengubah kode POS), atau via webhook/polling.
 - **DB**: Neon Postgres — `DATABASE_URL` sudah di-set di Vercel (integrasi Vercel Postgres/Neon), migrasi `init` + `add_owner_id` sudah diterapkan
 - **PWA**: service worker network-first utk navigasi + cache `vscan-shell-v2` (update selalu ter-deliver)
 
+### ⌨️ Agent v2.5 — input kode pairing interaktif (tanpa edit manual) (2026-08-07)
+- **Permintaan user**: "agent ada fitur masukan code biar gak manual" —
+  sebelumnya kode pairing harus diisi manual ke `agent.env`/`--code`; tanpa
+  kode agent langsung berhenti (parser.error).
+- **Fix** di `scanner-agent/agent.py` v2.5:
+  - `prompt_for_pairing_code()` — saat start tanpa kode & stdin interaktif
+    (terminal), agent bertanya **"Masukkan kode pairing:"**, kode divalidasi
+    ke **`POST /api/check`** (pakai User-Agent browser, alasan 403 Cloudflare
+    sama seperti poll), lalu **disimpan otomatis ke `agent.env`**
+    (`save_code_to_env` — update baris VSCAN_CODE, baris lain dipertahankan,
+    file dibuat bila belum ada), dan agent langsung jalan.
+  - Kode salah → alasan jelas (tidak ditemukan/ditutup/kadaluwarsa) + minta
+    ulang (maks 3×); server tak terjangkau → konfirmasi dulu sebelum lanjut.
+  - Dari auto-start/background (bukan tty) prompt dilewati → pesan error
+    lama, proses tidak menggantung.
+  - `AGENT_VERSION` → **2.5**.
+- **Terverifikasi**: smoke test diperluas (check_pairing_code valid/salah +
+  save_code_to_env) + tes interaktif tmux penuh: prompt muncul → kode salah
+  ditolak → kode benar diterima & `agent.env` terisi → polling jalan →
+  Ctrl+C exit 0.
+- **Update kasir**: curl install ulang; cek banner `v2.5`.
+
 ### 🗑️ Tombol hapus = HARD DELETE (bukan soft delete lagi) (2026-08-07)
 - **Keputusan user**: "hapus" sesi di landing `/` & `/register` kini **menghapus
   permanen** dari DB — bukan sekadar set `status: "closed"`.

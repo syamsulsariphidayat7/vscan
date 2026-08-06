@@ -35,7 +35,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime
 
-AGENT_VERSION = "2.4"  # tampil di banner startup; naikkan tiap update penting
+AGENT_VERSION = "2.5"  # tampil di banner startup; naikkan tiap update penting
 
 _VK_RETURN = 0x0D  # VK code tombol Enter (Windows)
 
@@ -563,6 +563,121 @@ def fetch_scans(url: str, code: str, longpoll: bool = True) -> list[dict]:
     return [s for s in scans if isinstance(s, dict) and isinstance(s.get("barcode"), str)]
 
 
+def check_pairing_code(url: str, code: str) -> tuple[bool, str]:
+    """Validasi kode pairing ke VScan via POST /api/check.
+
+    Mengembalikan (valid, pesan). valid=True → kode diterima. Bila tidak,
+    pesan berisi alasan (kode salah / sesi ditutup / kadaluwarsa / jaringan).
+    Dipakai prompt interaktif supaya kode salah langsung ketahuan di start,
+    bukan saat polling gagal."""
+    endpoint = f"{url.rstrip('/')}/api/check"
+    payload = json.dumps({"code": code}).encode("utf-8")
+    req = urllib.request.Request(
+        endpoint,
+        data=payload,
+        method="POST",
+        headers={"Content-Type": "application/json", "User-Agent": _BROWSER_UA},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as res:
+            data = json.loads(res.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        # HTTP 403 (blokir Cloudflare) / 5xx = server tidak bisa dipakai utk
+        # validasi — BUKAN berarti kode salah. Prefix dipilih supaya jalur
+        # konfirmasi di prompt_for_pairing_code ikut menanganinya.
+        return False, f"tidak bisa memvalidasi kode (HTTP {e.code})"
+    except urllib.error.URLError as e:
+        return False, f"tidak bisa terhubung ke VScan ({e.reason})"
+    except (json.JSONDecodeError, ValueError):
+        return False, "respons server tidak terbaca"
+
+    if data.get("valid") is True:
+        return True, ""
+    reason = data.get("reason", "invalid")
+    return False, {
+        "not_found": "kode tidak ditemukan",
+        "inactive": "sesi sudah ditutup",
+        "expired": "kode sudah kedaluwarsa",
+        "invalid": "kode tidak valid",
+    }.get(reason, f"kode tidak valid ({reason})")
+
+
+def save_code_to_env(code: str, path: str | None = None) -> None:
+    """Tulis/update VSCAN_CODE di agent.env (file konfigurasi lokal).
+    Baris lain dipertahankan; file dibuat otomatis bila belum ada.
+    Parameter `path` hanya utk tes (default: agent.env di folder script)."""
+    if path is None:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agent.env")
+    lines: list[str] = []
+    found = False
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        pass
+    for i, line in enumerate(lines):
+        if line.strip().startswith("VSCAN_CODE="):
+            lines[i] = f"VSCAN_CODE={code}\n"
+            found = True
+            break
+    if not found:
+        lines.append(f"VSCAN_CODE={code}\n")
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            f.writelines(lines)
+    except OSError as e:
+        # Direktori read-only dll.: jangan crash — kode tetap dipakai di
+        # memori sesi ini, simpan gagal hanya dicatat.
+        log(f"⚠️  Tidak bisa menyimpan kode ke {path} ({e}) — kode tetap dipakai"
+            " untuk sesi ini, tapi akan diminta lagi saat start berikutnya.")
+        return
+    log(f"Kode pairing tersimpan di {path}")
+
+
+def prompt_for_pairing_code(url: str) -> str:
+    """Minta kode pairing interaktif di terminal bila belum terisi — tanpa
+    perlu edit agent.env manual. Validasi ke server, lalu simpan otomatis.
+
+    Hanya jalan bila stdin interaktif (terminal). Dari auto-start/background
+    (bukan tty) langsung return "" — pemanggil yang menangani pesan error,
+    jadi proses tidak menggantung."""
+    if not sys.stdin.isatty():
+        return ""
+    print("\nVScan Scanner Agent belum punya kode pairing.")
+    print(f"  Server : {url}")
+    print("  Buat kode di halaman VScan → 'Daftarkan Proyek / POS'.")
+    for _attempt in range(3):
+        try:
+            code = input("Masukkan kode pairing (kosongkan untuk keluar): ").strip().upper()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return ""
+        if not code:
+            return ""
+        valid, msg = check_pairing_code(url, code)
+        if valid:
+            save_code_to_env(code)
+            print(f"  ✅ Kode valid — tersimpan di agent.env (VSCAN_CODE={code})")
+            return code
+        if msg.startswith(("tidak bisa", "respons server")):
+            # Server tak terjangkau / HTTP error (mis. 403 Cloudflare) —
+            # kode belum tentu salah: jangan blokir, tanya konfirmasi.
+            try:
+                confirm = input(f"  ⚠️  {msg}. Tetap pakai kode {code}? (y/n): ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                return ""
+            if confirm in ("y", "yes"):
+                save_code_to_env(code)
+                print(f"  ✅ Tersimpan di agent.env (VSCAN_CODE={code}) — mulai polling.")
+                return code
+            print("  Oke, coba kode lain.")
+        else:
+            print(f"  ❌ Kode tidak valid: {msg}. Coba lagi.")
+    print("  Gagal setelah 3× — jalankan ulang agent untuk mencoba lagi.")
+    return ""
+
+
 def load_known(path: str) -> set[str]:
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -602,7 +717,13 @@ def main() -> None:
     args = parser.parse_args()
 
     if not args.code:
-        parser.error("Wajib isi kode pairing: --code KODE (atau env VSCAN_CODE)")
+        # Belum ada kode → tanya interaktif (terminal) & simpan ke agent.env.
+        # Dari background/autostart (bukan tty) prompt dilewati → pesan di bawah.
+        args.code = prompt_for_pairing_code(args.url)
+    if not args.code:
+        parser.error(
+            "Wajib isi kode pairing: --code KODE, atau isi VSCAN_CODE di agent.env"
+        )
 
     # Pilih backend ketik SEBELUM loop (gagal di sini = pesan jelas, bukan crash).
     select_typing_backend(args.dry_run)
