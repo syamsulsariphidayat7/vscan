@@ -98,6 +98,7 @@ Scan dari HP → muncul `📥 [DRY-RUN] barcode diterima: 8991...` → berhenti 
 | Tidak ada barcode masuk | Cek `VSCAN_CODE` di `agent.env` masih benar & sesi aktif (12 jam) |
 | Barcode dobel di 2 komputer | Satu kode pairing = satu komputer kasir; buat kode baru untuk kasir lain |
 | Jendela POS tidak terisi | Pastikan jendela POS adalah yang aktif (scanner fisik juga begitu) |
+| **Keyboard fisik "nyangkut"** (mis. tombol Enter tidak berfungsi, dan baru jalan setelah menekan tombol di On-Screen Keyboard) | Proses agent berhenti di tengah pengetikan sehingga satu tombol masih dianggap "tertekan" oleh OS. Agent versi terbaru **otomatis me-reset state keyboard** saat mulai, di akhir tiap ketikan, dan saat berhenti (Ctrl+C / auto-start). **Perbaiki sekarang**: buka On-Screen Keyboard (Windows: tekan Win, ketik `osk`) lalu klik sekali tombol mana pun — atau tekan Shift 5× (reset Sticky Keys) — atau restart komputer. **Cegah**: update agent ke versi terbaru (jalankan ulang curl install di atas; `agent.env` kode pairing tetap dipertahankan). |
 
 ## Wayland (GNOME/KDE modern) — cara khusus
 

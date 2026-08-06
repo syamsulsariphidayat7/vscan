@@ -13,6 +13,25 @@ scanner USB, tanpa mengubah kode POS), atau via webhook/polling.
 
 ## Perubahan Terbaru
 
+### ⌨️ Fix: keyboard fisik "nyangkut" setelah agent berhenti (2026-08-06)
+- **Gejala**: setelah agent berhenti (Ctrl+C / ditutup / auto-start mematikan
+  proses) kadang di tengah pengetikan, tombol di keyboard fisik — mis. Enter —
+  tidak berfungsi; baru jalan setelah menekan tombol di **on-screen/virtual
+  keyboard**.
+- **Akar**: proses berhenti saat sebuah tombol masih "tertekan" (key-down tanpa
+  key-up terkirim) → OS menganggap tombol itu masih ditekan → penekanan fisik
+  berikutnya ditelan. On-screen keyboard mengirim siklus key baru sehingga
+  state ter-reset.
+- **Fix** di `scanner-agent/agent.py`:
+  - `release_keys()` — kirim key-up untuk semua tombol potensial (enter,
+    shift, ctrl, alt, win, tab, space, dll); dipanggil saat (1) agent **mulai**
+    (reset dari sesi/crash sebelumnya), (2) **akhir tiap ketikan**
+    (try/finally), (3) **saat keluar** (atexit + SIGINT/SIGTERM).
+  - Interval ketikan 2 ms → 10 ms untuk keandalan.
+- **Update komputer kasir**: jalankan ulang curl install (idempoten,
+  `agent.env` dipertahankan). Workaround cepat: tekan tombol mana pun di
+  On-Screen Keyboard, Shift 5×, atau restart.
+
 ### 🏠 Self-host: Cloudflare Tunnel + systemd (2026-08-05)
 - **Keputusan user**: pindah dari Vercel ke server sendiri untuk latensi
   (fungsi Vercel Hobby di AS + Neon Singapura = 2–7 dtk; tak bisa ganti

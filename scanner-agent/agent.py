@@ -22,9 +22,11 @@ Backend pengetikan (dipilih otomatis):
 """
 
 import argparse
+import atexit
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -96,9 +98,14 @@ def describe_session() -> str:
 
 def _type_with_pyautogui(pyautogui, barcode: str, enter: bool) -> None:
     """Ketik via pyautogui (X11/XWayland) — kecepatan seperti scanner USB."""
-    pyautogui.typewrite(barcode, interval=0.002)
-    if enter:
-        pyautogui.press("enter")
+    try:
+        pyautogui.typewrite(barcode, interval=0.01)
+        if enter:
+            pyautogui.press("enter")
+    finally:
+        # Jamin tidak ada tombol tertahan (mis. proses berhenti di tengah
+        # ketikan) — mencegah keyboard fisik 'nyangkut' setelah ini.
+        release_keys(pyautogui)
 
 
 def _type_with_ydotool(barcode: str, enter: bool) -> None:
@@ -112,6 +119,38 @@ def _type_with_ydotool(barcode: str, enter: bool) -> None:
 # Backend terpilih (diisi select_typing_backend)
 _typing_impl = None
 _typing_name = ""
+
+# Tombol yang berpotensi 'tertinggal' dalam keadaan tertekan bila proses
+# berhenti di tengah pengetikan (crash, Ctrl+C, ditutup paksa, auto-start
+# mematikan proses). Dipakai utk me-reset state keyboard.
+_STUCK_KEYS = (
+    "enter", "return", "tab", "space", "delete", "backspace", "capslock",
+    "shift", "shiftleft", "shiftright",
+    "ctrl", "ctrlleft", "ctrlright",
+    "alt", "altleft", "altright", "altgr",
+    "win", "winleft", "winright",
+)
+
+
+def release_keys(pyautogui=None) -> None:
+    """Lepas semua kemungkinan tombol yang masih tertahan (keyboard bersih).
+
+    Dipanggil saat start (reset dari sesi/crash sebelumnya), di akhir setiap
+    pengetikan (try/finally), dan saat keluar (atexit + SIGINT/SIGTERM).
+    Aman dipanggil kapan saja: keyUp untuk tombol yang tidak tertahan tidak
+    berdampak apa pun. Ini mencegah masalah klasik 'keyboard nyangkut' —
+    mis. tombol Enter fisik tidak berfungsi sampai ditekan di on-screen
+    keyboard."""
+    if pyautogui is None:
+        try:
+            import pyautogui
+        except Exception:
+            return  # tidak ada backend → tidak ada yang perlu di-reset
+    for key in _STUCK_KEYS:
+        try:
+            pyautogui.keyUp(key)
+        except Exception:
+            pass  # sebagian nama key tidak tersedia di semua platform/versi
 
 
 def select_typing_backend(dry_run: bool) -> None:
@@ -278,6 +317,11 @@ def main() -> None:
     log(f"  Interval: {args.interval}s")
     log(f"  Backend: {_typing_name}")
     log("  ✅ Arahkan kursor ke kolom autofocus POS (mis. kolom pencarian).")
+    if not args.dry_run and _typing_name.startswith("pyautogui"):
+        # Bersihkan state keyboard dari sesi sebelumnya yang berhenti di
+        # tengah ketikan (penyebab tombol Enter fisik kadang 'nyangkut').
+        release_keys()
+        log("⌨️  State keyboard di-reset (tombol yang mungkin nyangkut dibersihkan).")
     log("─" * 56)
 
     known = load_known(args.state)
@@ -318,8 +362,25 @@ def main() -> None:
         time.sleep(args.interval)  # jeda antar-gelombang scan
 
 
+def _stop(_signum=None, _frame=None) -> None:
+    """Keluar bersih: reset state keyboard dulu, baru berhenti."""
+    release_keys()
+    sys.exit(0)
+
+
 if __name__ == "__main__":
+    # Reset keyboard saat interpreter selesai (Ctrl+C, error, keluar normal).
+    atexit.register(release_keys)
+    # SIGINT (Ctrl+C) & SIGTERM (auto-start/systemd mematikan proses) →
+    # lepas semua tombol sebelum berhenti supaya keyboard tidak 'nyangkut'.
+    for _sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            signal.signal(_sig, _stop)
+        except (ValueError, AttributeError):  # pragma: no cover - platform
+            pass
+
     try:
         main()
     except KeyboardInterrupt:
-        print("\nScanner Agent dihentikan.")
+        release_keys()
+        print("\nScanner Agent dihentikan — state keyboard sudah di-reset.")

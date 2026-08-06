@@ -53,9 +53,12 @@ Panduan lengkap: [`scanner-agent/README.md`](scanner-agent/README.md).
 
 ### 🔄 Update agent ke versi terbaru
 Jalankan ulang perintah curl install yang sama (idempoten — file agent ditimpa
-versi terbaru, **`agent.env` kode pairing tetap dipertahankan**). Versi terbaru
-mengirim User-Agent browser, sehingga tidak lagi kena blokir 403 Cloudflare
-(penyebab umum pesan "Polling ditolak (403)").
+versi terbaru, **`agent.env` kode pairing tetap dipertahankan**). Versi terbaru:
+- mengirim User-Agent browser — tidak lagi kena blokir 403 Cloudflare
+  (penyebab umum pesan "Polling ditolak (403)");
+- **auto-reset state keyboard** saat mulai & berhenti — mencegah masalah
+  "tombol Enter fisik tidak berfungsi setelah agent berhenti" (keyboard
+  nyangkut akibat proses berhenti di tengah pengetikan).
 
 ---
 
