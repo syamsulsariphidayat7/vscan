@@ -36,6 +36,9 @@ import urllib.request
 from datetime import datetime
 
 POLL_TIMEOUT = 15  # detik, timeout HTTP tiap polling (long-poll menahan ~6s)
+TYPEWRITE_INTERVAL = 0.02  # detik antar karakter barcode
+ENTER_SETTLE_S = 0.05  # jeda setelah ketik barcode, sebelum Enter
+ENTER_HOLD_S = 0.08  # durasi tombol Enter ditahan (<< batas auto-repeat ~0,5s)
 
 
 def load_env_file(path: str) -> None:
@@ -97,11 +100,26 @@ def describe_session() -> str:
 
 
 def _type_with_pyautogui(pyautogui, barcode: str, enter: bool) -> None:
-    """Ketik via pyautogui (X11/XWayland) — kecepatan seperti scanner USB."""
+    """Ketik via pyautogui (X11/XWayland) — kecepatan seperti scanner USB.
+
+    Enter ditekan EKSPLISIT (keyDown → tahan singkat → keyUp), bukan via
+    pyautogui.press(). Keydown+keyup yang dikirim hampir tanpa jeda bisa
+    di-coalesce OS sehingga keyup Enter hilang → tombol tertinggal
+    'tertekan' → auto-repeat (SPAM Enter) dan tombol Enter fisik ikut
+    mati. Tahan ~80 ms masih jauh di bawah batas auto-repeat (~500 ms),
+    jadi aman tanpa memicu pengulangan.
+    """
     try:
-        pyautogui.typewrite(barcode, interval=0.01)
+        # Bersihkan sisa state keyboard dari scan sebelumnya (jaga-jaga).
+        release_keys(pyautogui)
+        pyautogui.typewrite(barcode, interval=TYPEWRITE_INTERVAL)
         if enter:
-            pyautogui.press("enter")
+            # Jeda singkat: pastikan karakter terakhir barcode selesai
+            # diproses aplikasi sebelum Enter ditekan.
+            time.sleep(ENTER_SETTLE_S)
+            pyautogui.keyDown("enter")
+            time.sleep(ENTER_HOLD_S)
+            pyautogui.keyUp("enter")
     finally:
         # Jamin tidak ada tombol tertahan (mis. proses berhenti di tengah
         # ketikan) — mencegah keyboard fisik 'nyangkut' setelah ini.

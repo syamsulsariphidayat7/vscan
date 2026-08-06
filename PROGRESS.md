@@ -13,6 +13,47 @@ scanner USB, tanpa mengubah kode POS), atau via webhook/polling.
 
 ## Perubahan Terbaru
 
+### ↩️ Rollback ke Vercel + bersihkan sisa self-host (2026-08-06)
+- **Keputusan**: self-host di "server" ini dibatalkan — mesin ternyata
+  **komputer rumah** (IP privat di belakang router, bukan VPS): akses masuk
+  diblokir (tanpa port forwarding) dan **ISP memblokir protokol Cloudflare
+  Tunnel** (QUIC/UDP 7844 mati, handshake HTTP/2 ke edge di-reset/EOF;
+  HTTPS normal tetap jalan). Situs sempat down (530) karena DNS menunjuk
+  tunnel yang tak bisa konek.
+- **Pemulihan**: DNS `vscan.boundless.my.id` dikembalikan ke **Vercel** oleh
+  user — terverifikasi live: HTTP 200 dari luar negeri (check-host
+  Jerman/Iran/US) & A record kembali IP Cloudflare/Vercel
+  (172.67.140.66 / 104.21.8.213), tanpa CNAME tunnel.
+- **Bersih-bersih mesin**: tunnel Cloudflare `vscan` DIHAPUS dari akun;
+  service systemd `vscan.service` & `cloudflared-vscan.service` di-stop /
+  disable / unit dihapus; binary `cloudflared`, `~/.cloudflared/`,
+  `~/.config/vscan/` (env Neon) dihapus; proses di :3000/:5353 & log /tmp
+  dibersihkan.
+- **Repo**: folder `scripts/selfhost/` (setup.sh, unit service, dns-proxy.py)
+  dihapus; section self-host di README diganti catatan rollback singkat.
+- **Status akhir**: hanya **Vercel + Neon** yang dipakai (seperti sebelum
+  percobaan). Latensi 2–7 dtk di Vercel Hobby tetap ada; bila butuh lebih
+  cepat → VPS sungguhan (bukan komputer rumah).
+
+### ⌨️ Fix: Enter spam (auto-repeat) + keyboard nyangkut tiap scan (2026-08-06)
+- **Gejala baru**: setelah scan barcode, POS menerima **Enter berulang**
+  (spam) dan tombol Enter fisik ikut mati. Server sudah diverifikasi aman
+  (claim-on-read atomic — tidak ada pengiriman ulang), jadi ini murni di
+  sisi pengetikan agent.
+- **Akar**: `pyautogui.press("enter")` mengirim keydown+keyup nyaris tanpa
+  jeda → OS kadang meng-coalesce sehingga **keyup Enter hilang** → tombol
+  tertinggal "tertekan" → auto-repeat (spam Enter) + Enter fisik ditelan.
+- **Fix** di `scanner-agent/agent.py`:
+  - Enter ditekan **eksplisit**: `keyDown("enter")` → tahan **80 ms** →
+    `keyUp("enter")` (jauh di bawah batas auto-repeat ~500 ms, jadi tanpa
+    spam; cukup lama agar aplikasi melihat penekanan yang jelas).
+  - `release_keys()` kini dipanggil **sebelum** mengetik (bersihkan sisa
+    scan sebelumnya) + **sesudahnya** (finally) + tetap saat start/exit.
+  - Jeda settle 50 ms setelah ketik barcode sebelum Enter, interval ketikan
+    0,01 → 0,02 s.
+- **Update komputer kasir**: jalankan ulang curl install (idempoten).
+  Workaround cepat: Shift 5×, klik tombol di On-Screen Keyboard, atau restart.
+
 ### ⌨️ Fix: keyboard fisik "nyangkut" setelah agent berhenti (2026-08-06)
 - **Gejala**: setelah agent berhenti (Ctrl+C / ditutup / auto-start mematikan
   proses) kadang di tengah pengetikan, tombol di keyboard fisik — mis. Enter —
@@ -46,9 +87,10 @@ scanner USB, tanpa mengubah kode POS), atau via webhook/polling.
   `cloudflared-vscan.service`.
 - **Latensi terukur di server baru**: poll ~0,2 dtk (vs 1,6 dtk), push ~0,3
   dtk (vs 1,5–5 dtk), E2E scan→POS ~0,5–1 dtk.
-- **Langkah user tersisa**: `cloudflared tunnel login` (browser) →
-  `bash scripts/selfhost/setup.sh` → (opsional) `sudo loginctl enable-linger
-  anaya`. Setelah DNS pindah, Vercel tidak dipakai lagi.
+- ⚠️ **DIBATALKAN & di-rollback ke Vercel** (2026-08-06): mesin ini ternyata
+  komputer rumah (bukan VPS) — akses masuk diblokir & ISP memblokir protokol
+  Cloudflare Tunnel. Semua artefak self-host sudah dibersihkan (lihat entri
+  terbaru di atas).
 
 ### ⚡ Long-poll di /api/poll — barcode terdeteksi ~0,3 dtk (2026-08-05)
 - **Masalah**: delay scan→POS ~2–4,5 dtk. Fungsi Vercel Hobby di-pin ke

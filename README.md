@@ -56,9 +56,10 @@ Jalankan ulang perintah curl install yang sama (idempoten — file agent ditimpa
 versi terbaru, **`agent.env` kode pairing tetap dipertahankan**). Versi terbaru:
 - mengirim User-Agent browser — tidak lagi kena blokir 403 Cloudflare
   (penyebab umum pesan "Polling ditolak (403)");
-- **auto-reset state keyboard** saat mulai & berhenti — mencegah masalah
-  "tombol Enter fisik tidak berfungsi setelah agent berhenti" (keyboard
-  nyangkut akibat proses berhenti di tengah pengetikan).
+- **auto-reset state keyboard** saat mulai, sebelum/sesudah tiap scan & saat
+  berhenti — mencegah masalah "tombol Enter fisik tidak berfungsi" dan
+  "Enter spam (auto-repeat)" akibat keyup yang hilang saat pengetikan.
+  Enter kini ditekan eksplisit (keyDown → tahan → keyUp).
 
 ---
 
@@ -110,36 +111,9 @@ pnpm dev                             # http://localhost:3000
    ```
 5. Custom domain: Vercel → project `vscan` → **Domains** → tambah `vscan.boundless.my.id` (arahkan DNS/CNAME).
 
-## 🏠 Self-host (opsional — tanpa Vercel, tanpa root)
-
-Jalankan di server sendiri (mis. VPS di Indonesia) untuk latensi terbaik:
-scan→POS **~0,5–1 dtk** (vs 2–7 dtk lewat Vercel Hobby yang region-nya di AS).
-Memakai **Cloudflare Tunnel** — tidak perlu root, tidak perlu buka port 80:
-
-```bash
-# 1. Di server: clone repo, install, build
-pnpm install && pnpm build
-
-# 2. Env produksi (Neon) — di luar repo, dibaca systemd
-mkdir -p ~/.config/vscan
-echo 'DATABASE_URL="postgresql://...neon.tech/neondb?sslmode=require"' > ~/.config/vscan/env
-
-# 3. Login Cloudflare SEKALI (browser terbuka, pilih akun pemilik boundless.my.id)
-~/.local/bin/cloudflared tunnel login
-
-# 4. Setup otomatis: buat tunnel, route DNS, aktifkan service app + tunnel
-bash scripts/selfhost/setup.sh
-
-# 5. (Disarankan) agar service tetap hidup setelah logout/reboot
-sudo loginctl enable-linger anaya
-```
-
-Setelah itu `vscan.boundless.my.id` otomatis mengarah ke server ini (DNS
-di-route tunnel; Vercel tidak dipakai lagi). Deploy versi baru:
-
-```bash
-git pull && pnpm build && systemctl --user restart vscan
-```
+> ℹ️ Self-host via Cloudflare Tunnel pernah dicoba (2026-08-05) lalu
+> **di-rollback ke Vercel** — ISP rumah memblokir protokol tunnel. Semua
+> artefak self-host sudah dibersihkan (lihat PROGRESS.md).
 
 ## 🗂 Struktur
 
