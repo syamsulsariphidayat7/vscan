@@ -35,10 +35,16 @@ import urllib.parse
 import urllib.request
 from datetime import datetime
 
+AGENT_VERSION = "2.1"  # tampil di banner startup; naikkan tiap update penting
+
 POLL_TIMEOUT = 15  # detik, timeout HTTP tiap polling (long-poll menahan ~6s)
 TYPEWRITE_INTERVAL = 0.02  # detik antar karakter barcode
 ENTER_SETTLE_S = 0.05  # jeda setelah ketik barcode, sebelum Enter
 ENTER_HOLD_S = 0.08  # durasi tombol Enter ditahan (<< batas auto-repeat ~0,5s)
+
+# Kirim scancode di Windows (diisi _get_win_sender saat pertama dipakai).
+# False = Windows API tidak tersedia / gagal inisialisasi.
+_win32_send = None
 
 
 def load_env_file(path: str) -> None:
@@ -99,15 +105,111 @@ def describe_session() -> str:
     return "\n".join(lines)
 
 
-def _type_with_pyautogui(pyautogui, barcode: str, enter: bool) -> None:
-    """Ketik via pyautogui (X11/XWayland) — kecepatan seperti scanner USB.
+def _get_win_sender():
+    """(Windows) Siapkan pengirim scancode via SendInput — dipakai untuk
+    Enter & reset keyboard. Scancode = tombol FISIK (bebas layout/IME),
+    cara yang sama dipakai pynput; jauh lebih andal daripada VK code ala
+    pyautogui yang bisa kehilangan keyup pada sebagian driver/IME.
+    Mengembalikan fungsi (scan:int, down:bool)->bool, atau False bila
+    API Windows tidak tersedia."""
+    global _win32_send
+    if _win32_send is not None:
+        return _win32_send
+    try:
+        import ctypes
+        from ctypes import wintypes
 
-    Enter ditekan EKSPLISIT (keyDown → tahan singkat → keyUp), bukan via
-    pyautogui.press(). Keydown+keyup yang dikirim hampir tanpa jeda bisa
-    di-coalesce OS sehingga keyup Enter hilang → tombol tertinggal
-    'tertekan' → auto-repeat (SPAM Enter) dan tombol Enter fisik ikut
-    mati. Tahan ~80 ms masih jauh di bawah batas auto-repeat (~500 ms),
-    jadi aman tanpa memicu pengulangan.
+        ULONG_PTR = ctypes.c_ulonglong if ctypes.sizeof(ctypes.c_void_p) == 8 else ctypes.c_ulong
+
+        class _KEYBDINPUT(ctypes.Structure):
+            _fields_ = [
+                ("wVk", wintypes.WORD),
+                ("wScan", wintypes.WORD),
+                ("dwFlags", wintypes.DWORD),
+                ("time", wintypes.DWORD),
+                ("dwExtraInfo", ULONG_PTR),
+            ]
+
+        class _INPUT(ctypes.Structure):
+            class _U(ctypes.Union):
+                _fields_ = [("ki", _KEYBDINPUT)]
+
+            _anonymous_ = ("u",)
+            _fields_ = [("type", wintypes.DWORD), ("u", _U)]
+
+        user32 = ctypes.windll.user32
+        user32.MapVirtualKeyW.argtypes = [wintypes.UINT, wintypes.UINT]
+        user32.MapVirtualKeyW.restype = wintypes.UINT
+        user32.SendInput.argtypes = [wintypes.UINT, ctypes.POINTER(_INPUT), ctypes.c_int]
+        user32.SendInput.restype = wintypes.UINT
+
+        KEYEVENTF_SCANCODE = 0x0008
+        KEYEVENTF_KEYUP = 0x0002
+        INPUT_KEYBOARD = 1
+        size = ctypes.sizeof(_INPUT)
+
+        def _send(scan: int, down: bool) -> bool:
+            inp = _INPUT()
+            inp.type = INPUT_KEYBOARD
+            inp.u.ki.wVk = 0
+            inp.u.ki.wScan = scan
+            inp.u.ki.dwFlags = KEYEVENTF_SCANCODE | (0 if down else KEYEVENTF_KEYUP)
+            return user32.SendInput(1, ctypes.byref(inp), size) == 1
+
+        _win32_send = _send
+        return _send
+    except Exception:
+        _win32_send = False
+        return False
+
+
+def _enter_scan_code() -> int:
+    """Scancode tombol Enter (0x1C pada keyboard standar)."""
+    try:
+        import ctypes
+
+        return int(ctypes.windll.user32.MapVirtualKeyW(0x0D, 0))  # VK_RETURN
+    except Exception:
+        return 0x1C
+
+
+def _press_enter_windows() -> bool:
+    """(Windows) Tekan Enter via scancode: down → tahan → up.
+    Mengembalikan True bila berhasil dikirim."""
+    sender = _get_win_sender()
+    if not sender:
+        return False
+    try:
+        scan = _enter_scan_code()
+        if not sender(scan, True):
+            return False
+        time.sleep(ENTER_HOLD_S)
+        return sender(scan, False)
+    except Exception:
+        return False
+
+
+def _press_enter(pyautogui) -> None:
+    """Tekan Enter sekali dengan andal (anti stuck/spam).
+
+    Windows → scancode via SendInput (fisik, bebas layout/IME). Selain itu
+    → keyDown/tahan/keyUp via pyautogui, dengan keyup sebagai event
+    terpisah (bukan press() yang di-coalesce OS sehingga keyup hilang)."""
+    if sys.platform == "win32" and _press_enter_windows():
+        return
+    pyautogui.keyDown("enter")
+    time.sleep(ENTER_HOLD_S)
+    pyautogui.keyUp("enter")
+
+
+def _type_with_pyautogui(pyautogui, barcode: str, enter: bool) -> None:
+    """Ketik via pyautogui (X11/XWayland/Windows) — seperti scanner USB.
+
+    Enter ditekan lewat _press_enter(): di Windows pakai scancode
+    (SendInput), selain itu keyDown/tahan/keyUp eksplisit. Tanpa ini,
+    keyup Enter bisa hilang → tombol tertinggal 'tertekan' → auto-repeat
+    (SPAM Enter) dan tombol Enter fisik ikut mati. Tahan ~80 ms masih jauh
+    di bawah batas auto-repeat (~500 ms), jadi aman.
     """
     try:
         # Bersihkan sisa state keyboard dari scan sebelumnya (jaga-jaga).
@@ -117,9 +219,7 @@ def _type_with_pyautogui(pyautogui, barcode: str, enter: bool) -> None:
             # Jeda singkat: pastikan karakter terakhir barcode selesai
             # diproses aplikasi sebelum Enter ditekan.
             time.sleep(ENTER_SETTLE_S)
-            pyautogui.keyDown("enter")
-            time.sleep(ENTER_HOLD_S)
-            pyautogui.keyUp("enter")
+            _press_enter(pyautogui)
     finally:
         # Jamin tidak ada tombol tertahan (mis. proses berhenti di tengah
         # ketikan) — mencegah keyboard fisik 'nyangkut' setelah ini.
@@ -169,6 +269,15 @@ def release_keys(pyautogui=None) -> None:
             pyautogui.keyUp(key)
         except Exception:
             pass  # sebagian nama key tidak tersedia di semua platform/versi
+    # Windows: keyup Enter via scancode — memastikan Enter yang 'nyangkut'
+    # dari keyup yang hilang di jalur VK benar-benar terlepas.
+    if sys.platform == "win32":
+        try:
+            sender = _get_win_sender()
+            if sender:
+                sender(_enter_scan_code(), False)
+        except Exception:
+            pass
 
 
 def select_typing_backend(dry_run: bool) -> None:
@@ -329,10 +438,11 @@ def main() -> None:
     select_typing_backend(args.dry_run)
 
     log("─" * 56)
-    log(f"VScan Scanner Agent — mode {'DRY-RUN (tidak mengetik)' if args.dry_run else 'MENGETIK KE OS'}")
+    log(f"VScan Scanner Agent v{AGENT_VERSION} — mode {'DRY-RUN (tidak mengetik)' if args.dry_run else 'MENGETIK KE OS'}")
     log(f"  Server : {args.url}")
     log(f"  Kode   : {args.code}")
     log(f"  Interval: {args.interval}s")
+    log(f"  Versi  : v{AGENT_VERSION}")
     log(f"  Backend: {_typing_name}")
     log("  ✅ Arahkan kursor ke kolom autofocus POS (mis. kolom pencarian).")
     if not args.dry_run and _typing_name.startswith("pyautogui"):

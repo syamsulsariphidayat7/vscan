@@ -13,6 +13,26 @@ scanner USB, tanpa mengubah kode POS), atau via webhook/polling.
 
 ## Perubahan Terbaru
 
+### ⌨️ Fix #2: Enter di Windows via scancode SendInput + AGENT_VERSION (2026-08-06)
+- **Gejala berlanjut**: spam enter & Enter fisik mati setelah scan, walau
+  sudah dipakai keyDown/tahan/keyUp eksplisit. Petunjuk kunci dari user:
+  **Win+Enter tetap jalan** dan reset terjadi setelah klik Enter di
+  on-screen keyboard → Enter tertinggal "tertekan" **di level OS Windows**.
+- **Akar**: pyautogui (dan `press`/`keyDown` VK code) bisa kehilangan keyup
+  Enter pada sebagian driver keyboard/IME → tombol dianggap ditekan terus
+  (auto-repeat).
+- **Fix** di `scanner-agent/agent.py` v2.1:
+  - Enter di Windows dikirim via **scancode langsung** — `SendInput` +
+    `KEYEVENTF_SCANCODE` (wVk=0, wScan dari `MapVirtualKeyW(VK_RETURN,0)`),
+    down → tahan 80 ms → up; bebas layout/IME, persis keyboard fisik
+    (metode yang sama dipakai pynput). Fallback otomatis ke pyautogui bila
+    SendInput gagal.
+  - `release_keys()` di Windows juga mengirim keyup scancode Enter —
+    memastikan Enter nyangkut dari jalur VK benar-benar terlepas.
+  - Banner startup menampilkan **`AGENT_VERSION` (v2.1)** — cara cepat
+    memastikan kasir sudah pakai versi terbaru.
+- **Update kasir**: jalankan ulang curl install; cek banner `v2.1`.
+
 ### ↩️ Rollback ke Vercel + bersihkan sisa self-host (2026-08-06)
 - **Keputusan**: self-host di "server" ini dibatalkan — mesin ternyata
   **komputer rumah** (IP privat di belakang router, bukan VPS): akses masuk

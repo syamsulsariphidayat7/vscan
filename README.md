@@ -57,9 +57,10 @@ versi terbaru, **`agent.env` kode pairing tetap dipertahankan**). Versi terbaru:
 - mengirim User-Agent browser — tidak lagi kena blokir 403 Cloudflare
   (penyebab umum pesan "Polling ditolak (403)");
 - **auto-reset state keyboard** saat mulai, sebelum/sesudah tiap scan & saat
-  berhenti — mencegah masalah "tombol Enter fisik tidak berfungsi" dan
-  "Enter spam (auto-repeat)" akibat keyup yang hilang saat pengetikan.
-  Enter kini ditekan eksplisit (keyDown → tahan → keyUp).
+  berhenti — mencegah "tombol Enter fisik tidak berfungsi" dan "Enter spam
+  (auto-repeat)". Di Windows, Enter dikirim via **scancode langsung
+  (SendInput)** — bebas layout/IME, tidak ada keyup yang hilang; di Linux
+  via keyDown/tahan/keyUp eksplisit. Cek versi di banner: harus `v2.1+`.
 
 ---
 
