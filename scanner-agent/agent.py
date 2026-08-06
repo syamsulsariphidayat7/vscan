@@ -35,7 +35,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime
 
-AGENT_VERSION = "2.2"  # tampil di banner startup; naikkan tiap update penting
+AGENT_VERSION = "2.3"  # tampil di banner startup; naikkan tiap update penting
 
 _VK_RETURN = 0x0D  # VK code tombol Enter (Windows)
 
@@ -47,6 +47,9 @@ ENTER_HOLD_S = 0.08  # durasi tombol Enter ditahan (<< batas auto-repeat ~0,5s)
 # Kirim scancode di Windows (diisi _get_win_sender saat pertama dipakai).
 # False = Windows API tidak tersedia / gagal inisialisasi.
 _win32_send = None
+
+# Koneksi X11 di-cache (XQueryKeymap) — dibuka sekali, bukan tiap scan.
+_x11_display = None
 
 
 def load_env_file(path: str) -> None:
@@ -216,33 +219,77 @@ def _enter_is_down_windows() -> bool:
         return False
 
 
-def _ensure_enter_released(log_fail: bool = True) -> bool:
-    """(Windows) Verifikasi Enter benar-benar terlepas setelah pengetikan.
+def _enter_is_down_x11() -> bool:
+    """(Linux X11) True bila tombol Enter masih terdeteksi 'tertekan' di X
+    server (XQueryKeymap — padanan X11 dari GetAsyncKeyState Windows).
+    Koneksi X di-cache (dibuka sekali), di-reset otomatis bila X server
+    ganti/restart."""
+    global _x11_display
+    try:
+        from Xlib import XK
+
+        if _x11_display is None:
+            from Xlib import display
+
+            _x11_display = display.Display()
+        keycode = _x11_display.keysym_to_keycode(XK.string_to_keysym("Return"))
+        if not keycode:
+            return False
+        keymap = _x11_display.query_keymap()
+        return bool(keymap[keycode // 8] & (1 << (keycode % 8)))
+    except Exception:
+        _x11_display = None  # izinkan koneksi ulang pada panggilan berikutnya
+        return False
+
+
+def _ensure_enter_released(pyautogui=None, log_fail: bool = True) -> bool:
+    """Verifikasi Enter benar-benar terlepas setelah pengetikan.
 
     Bila keyup sebelumnya hilang (tombol masih 'tertekan' → spam enter &
-    Enter fisik mati), kirim keyup scancode berulang sampai bersih, lalu
-    log peringatan bila masih nyangkut. Di platform selain Windows selalu
-    mengembalikan True.
+    Enter fisik mati), kirim keyup ulang sampai bersih:
+      - Windows  → keyup scancode (SendInput),
+      - Linux X11 → keyUp via pyautogui (XTest) setelah cek XQueryKeymap.
+    Wayland/ydotool (uinput, atomik) & platform lain → selalu True.
+    Mengembalikan True bila bersih / tidak perlu dicek.
     """
-    if sys.platform != "win32":
-        return True
-    sender = _get_win_sender()
-    if not sender:
-        return True  # tidak bisa diperiksa → jangan ganggu alur normal
-    scan = _enter_scan_code()
-    time.sleep(0.05)  # tunggu event keyup sebelumnya benar-benar diproses
-    # Catatan: bila kasir sedang FISIK memegang tombol Enter saat cek ini,
-    # keyup scancode akan melepasnya — kasus sangat jarang, loop dibatasi 5×.
-    for _attempt in range(5):
-        if not _enter_is_down_windows():
-            return True
-        sender(scan, False)  # keyup ulang via scancode
-        time.sleep(0.05)
-    if log_fail:
-        log("⚠️  Enter masih terdeteksi 'tertekan' setelah 5× keyup — kemungkinan "
-            "ada software keyboard remapper (PowerToys/SharpKeys) atau driver "
-            "keyboard bermasalah di komputer kasir.")
-    return False
+    if sys.platform == "win32":
+        sender = _get_win_sender()
+        if not sender:
+            return True  # tidak bisa diperiksa → jangan ganggu alur normal
+        scan = _enter_scan_code()
+        time.sleep(0.05)  # tunggu event keyup sebelumnya benar-benar diproses
+        # Catatan: bila kasir sedang FISIK memegang tombol Enter saat cek ini,
+        # keyup akan melepasnya — kasus sangat jarang, loop dibatasi 5×.
+        for _attempt in range(5):
+            if not _enter_is_down_windows():
+                return True
+            sender(scan, False)  # keyup ulang via scancode
+            time.sleep(0.05)
+        if log_fail:
+            log("⚠️  Enter masih 'tertekan' (Windows) setelah 5× keyup — cek "
+                "software keyboard remapper (PowerToys/SharpKeys).")
+        return False
+
+    if _typing_name.startswith("pyautogui"):
+        try:
+            if pyautogui is None:
+                import pyautogui
+            time.sleep(0.05)
+            # Catatan: bila kasir sedang FISIK memegang tombol Enter saat cek
+            # ini, keyup akan melepasnya — kasus sangat jarang, loop dibatasi 5×.
+            for _attempt in range(5):
+                if not _enter_is_down_x11():
+                    return True
+                pyautogui.keyUp("enter")
+                time.sleep(0.05)
+            if log_fail:
+                log("⚠️  Enter masih 'tertekan' (X11) setelah 5× keyup — cek "
+                    "layout keyboard / software remapper di komputer kasir.")
+            return False
+        except Exception:
+            return True  # tidak bisa diperiksa → jangan ganggu alur
+
+    return True
 
 
 def _type_with_pyautogui(pyautogui, barcode: str, enter: bool) -> None:
@@ -267,16 +314,46 @@ def _type_with_pyautogui(pyautogui, barcode: str, enter: bool) -> None:
         # Jamin tidak ada tombol tertahan (mis. proses berhenti di tengah
         # ketikan) — mencegah keyboard fisik 'nyangkut' setelah ini.
         release_keys(pyautogui)
-        # Windows: verifikasi Enter benar-benar terlepas (cek state OS).
-        _ensure_enter_released()
+        # Verifikasi Enter benar-benar terlepas (Windows: GetAsyncKeyState /
+        # Linux X11: XQueryKeymap) — keyup ulang otomatis bila masih nyangkut.
+        _ensure_enter_released(pyautogui)
+
+
+def _ydotool_ready() -> bool:
+    """ydotool siap dipakai bila binary ADA dan daemon-nya berjalan (socket
+    daemon terpasang). Tanpa cek ini, preferensi ydotool bisa memilih jalur
+    yang gagal total saat daemon tidak jalan."""
+    if not shutil.which("ydotool"):
+        return False
+    uid = os.getuid() if hasattr(os, "getuid") else 1000
+    candidates = (
+        f"/run/user/{uid}/.ydotool_socket",
+        "/tmp/.ydotool_socket",
+        os.path.expanduser("~/.ydotool_socket"),
+    )
+    return any(os.path.exists(s) for s in candidates)
 
 
 def _type_with_ydotool(barcode: str, enter: bool) -> None:
     """Ketik via ydotool (Wayland). Butuh daemon ydotool berjalan:
-    sudo systemctl enable --now ydotool"""
-    subprocess.run(["ydotool", "type", "--key-delay", "10", barcode], check=True)
-    if enter:
-        subprocess.run(["ydotool", "key", "28"], check=True)  # KEY_ENTER
+    sudo systemctl enable --now ydotool. Bila daemon mati/gagal, fallback
+    otomatis ke pyautogui supaya pengetikan tidak berhenti total."""
+    try:
+        subprocess.run(["ydotool", "type", "--key-delay", "10", barcode], check=True)
+        if enter:
+            subprocess.run(["ydotool", "key", "28"], check=True)  # KEY_ENTER
+    except Exception as e:
+        log(f"⚠️  ydotool gagal ({e}) — fallback ke pyautogui.")
+        try:
+            import pyautogui
+
+            try:
+                pyautogui.PAUSE = 0.01
+            except Exception:
+                pass
+            _type_with_pyautogui(pyautogui, barcode, enter)
+        except Exception as e2:
+            raise RuntimeError(f"ydotool dan pyautogui sama-sama gagal: {e2}") from e
 
 
 # Backend terpilih (diisi select_typing_backend)
@@ -333,7 +410,19 @@ def select_typing_backend(dry_run: bool) -> None:
         _typing_name = "dry-run (tidak mengetik)"
         return
 
-    # 1) pyautogui (X11 / XWayland / Windows)
+    # Deteksi sesi: Wayland memakai ydotool (uinput, level kernel) — jauh
+    # lebih andal daripada XTest/XWayland yang bisa meninggalkan tombol
+    # 'nyangkut' (spam Enter & Enter fisik mati) pada sebagian compositor.
+    is_wayland = bool(os.environ.get("WAYLAND_DISPLAY")) or \
+        os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland"
+
+    # 1) Wayland → ydotool lebih dulu (hanya bila daemon-nya benar-benar jalan)
+    if is_wayland and _ydotool_ready():
+        _typing_impl = lambda b, e: _type_with_ydotool(b, e)
+        _typing_name = "ydotool (Wayland)"
+        return
+
+    # 2) X11 / Windows → pyautogui (XTest / SendInput)
     try:
         import pyautogui
 
@@ -344,7 +433,7 @@ def select_typing_backend(dry_run: bool) -> None:
         except Exception:
             pass
         _typing_impl = lambda b, e: _type_with_pyautogui(pyautogui, b, e)
-        _typing_name = "pyautogui (X11)"
+        _typing_name = "pyautogui (XWayland)" if is_wayland else "pyautogui (X11)"
         return
     except ImportError:
         pass  # belum terinstall — lanjut ke ydotool / pesan jelas
@@ -354,13 +443,17 @@ def select_typing_backend(dry_run: bool) -> None:
         try:
             import pyautogui
 
+            try:
+                pyautogui.PAUSE = 0.01
+            except Exception:
+                pass
             _typing_impl = lambda b, e: _type_with_pyautogui(pyautogui, b, e)
             _typing_name = f"pyautogui (X11, XAUTHORITY={found})" if found else "pyautogui (X11)"
             return
         except Exception:
             pass  # tetap gagal → coba ydotool
 
-    # 2) ydotool (Wayland)
+    # 3) ydotool (Wayland tanpa deteksi / fallback)
     if shutil.which("ydotool"):
         _typing_impl = lambda b, e: _type_with_ydotool(b, e)
         _typing_name = "ydotool (Wayland)"
@@ -501,12 +594,11 @@ def main() -> None:
         # tengah ketikan (penyebab tombol Enter fisik kadang 'nyangkut').
         release_keys()
         log("⌨️  State keyboard di-reset (tombol yang mungkin nyangkut dibersihkan).")
-        if sys.platform == "win32":
-            if _ensure_enter_released(log_fail=False):
-                log("   Enter terdeteksi terlepas ✅")
-            else:
-                log("   ⚠️  Enter masih 'tertekan' — cek software keyboard remapper "
-                    "(PowerToys/SharpKeys) di komputer kasir.")
+        if _ensure_enter_released(log_fail=False):
+            log("   Enter terdeteksi terlepas ✅")
+        else:
+            log("   ⚠️  Enter masih 'tertekan' — cek layout keyboard / software "
+                "remapper di komputer kasir.")
     log("─" * 56)
 
     known = load_known(args.state)

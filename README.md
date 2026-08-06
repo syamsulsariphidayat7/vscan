@@ -58,11 +58,11 @@ versi terbaru, **`agent.env` kode pairing tetap dipertahankan**). Versi terbaru:
   (penyebab umum pesan "Polling ditolak (403)");
 - **auto-reset state keyboard** saat mulai, sebelum/sesudah tiap scan & saat
   berhenti — mencegah "tombol Enter fisik tidak berfungsi" dan "Enter spam
-  (auto-repeat)". Di Windows, Enter dikirim via **scancode langsung
-  (SendInput)** + **verifikasi otomatis** (`GetAsyncKeyState`: setelah tiap
-  scan agent memastikan Enter benar-benar terlepas, keyup ulang bila
-  perlu); di Linux via keyDown/tahan/keyUp eksplisit. Cek versi di banner:
-  harus `v2.2+`.
+  (auto-repeat)". Agent v2.3+ bekerja di **semua platform**: Wayland →
+  **ydotool** (uinput, kernel-level, tidak bisa nyangkut); **X11** →
+  verifikasi state Enter via `XQueryKeymap` + keyup ulang otomatis;
+  Windows → scancode SendInput + `GetAsyncKeyState`. Cek versi di banner:
+  harus `v2.3+`.
 
 ---
 

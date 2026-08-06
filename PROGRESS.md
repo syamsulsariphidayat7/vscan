@@ -13,6 +13,27 @@ scanner USB, tanpa mengubah kode POS), atau via webhook/polling.
 
 ## Perubahan Terbaru
 
+### 🐧 Fix #4: klarifikasi — kasir ternyata LINUX, fix diperluas ke semua platform (v2.3) (2026-08-06)
+- **Koreksi asumsi**: user menguji di **Linux** — "window+enter" = tombol
+  Super/Win di keyboard, bukan OS Windows. Jadi masalah stuck-enter juga
+  terjadi di Linux (X11: keyup XTest bisa hilang → nyangkut; Wayland via
+  XWayland rentan).
+- **Fix di `scanner-agent/agent.py` v2.3 (lintas platform)**:
+  - **Wayland** → backend kini otomatis memilih **ydotool** (uinput,
+    level kernel, down+up atomik — tidak mungkin nyangkut), bukan
+    pyautogui/XWayland. Deteksi: `WAYLAND_DISPLAY` / `XDG_SESSION_TYPE`;
+    ydotool hanya dipilih bila **daemon/socket-nya jalan** (`_ydotool_ready`)
+    dan ada fallback otomatis ke pyautogui bila `ydotool` gagal saat
+    runtime (daemon mati → tidak berhenti total).
+  - **Linux X11** → `_enter_is_down_x11()` via **`XQueryKeymap`** (padanan
+    X11 dari `GetAsyncKeyState`, koneksi X di-cache): setelah tiap scan &
+    saat start, agent memastikan keycode Enter tidak lagi tertekan; bila
+    ya, kirim keyUp ulang (maks 5×) sampai bersih + peringatan bila tetap
+    nyangkut.
+  - Windows (v2.1/2.2) tetap: scancode SendInput + GetAsyncKeyState.
+  - Banner startup: "Enter terdeteksi terlepas ✅" di semua platform.
+- **Update kasir**: curl install ulang; cek banner `v2.3`.
+
 ### ⌨️ Fix #3: verifikasi otomatis Enter terlepas (GetAsyncKeyState) — v2.2 (2026-08-06)
 - **Permintaan user**: agent mengecek sendiri apakah Enter benar-benar
   terlepas setelah scan (bukan hanya mengirim keyup).
