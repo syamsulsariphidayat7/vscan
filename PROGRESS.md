@@ -11,6 +11,22 @@ scanner USB, tanpa mengubah kode POS), atau via webhook/polling.
 - **DB**: Neon Postgres — `DATABASE_URL` sudah di-set di Vercel (integrasi Vercel Postgres/Neon), migrasi `init` + `add_owner_id` sudah diterapkan
 - **PWA**: service worker network-first utk navigasi + cache `vscan-shell-v2` (update selalu ter-deliver)
 
+### 🧪 Smoke test agent + verifikasi build produksi (2026-08-07)
+- **`scanner-agent/smoke_test.py`** (baru): smoke test end-to-end tanpa
+  internet — mock server `/api/poll` lokal → jalankan `agent.py --dry-run`
+  sebagai subproses → verifikasi (1) py_compile, (2) banner startup versi
+  v2.x + mode DRY-RUN + Backend: dry-run, (3) round-trip barcode via
+  /api/poll (barcode di-push ke mock → agent terima & log), (4) exit bersih
+  setelah SIGINT (exit 0, state keyboard di-reset), (5) state file ditulis.
+- Script npm `smoke:agent` ditambahkan di `package.json`. Semua tes LULUS
+  (exit 0).
+- **Build produksi terverifikasi**: `pnpm build` OK — compiled 1,6 dtk,
+  TypeScript lulus, 6 halaman statis + 6 route API dynamic (force-dynamic
+  tetap). Catatan: `next build` harus dijalankan dengan `setsid` di mesin
+  ini (proses turunan ikut mati saat shell basher berakhir).
+- AGENTS.md diperbarui: workflow validasi kini `pnpm build` + `pnpm lint` +
+  `pnpm smoke:agent`.
+
 ### 📘 AGENTS.md dibuat (2026-08-07)
 - File panduan agent AI di root: ringkasan arsitektur (alur push→poll,
   claim-on-read, long-poll), konvensi stack & bahasa (ID), workflow

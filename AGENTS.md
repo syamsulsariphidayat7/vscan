@@ -89,7 +89,10 @@ ke OS. **Ini bagian paling rapuh proyek — riwayat bug panjang soal Enter.**
   layar). User-Agent browser wajib dikirim (Cloudflare memblokir
   `Python-urllib` → 403).
 - Test cepat: `python agent.py --code KODE --dry-run` (tidak mengetik).
-  Syntax check: `python -m py_compile scanner-agent/agent.py`.
+  **Smoke test** (mock server lokal, tanpa internet): `pnpm smoke:agent`
+  atau `python3 scanner-agent/smoke_test.py` — verifikasi syntax, banner
+  versi, round-trip barcode via /api/poll, dan exit bersih. Jangan
+  me-regresi Enter fix saat mengubah agent.py.
 
 ## Workflow yang disepakati
 
@@ -100,8 +103,8 @@ ke OS. **Ini bagian paling rapuh proyek — riwayat bug panjang soal Enter.**
 3. Commit dengan pesan konvensi repo:
    `fix(agent) vX.Y: ...` / `feat(...): ...` / `perf(...)` / `chore(...)` —
    Indonesia, jelaskan akar masalah + fix.
-4. Validasi sebelum commit: `pnpm build` + `pnpm lint` (web), `python -m
-   py_compile scanner-agent/agent.py` (agent).
+4. Validasi sebelum commit: `pnpm build` + `pnpm lint` (web),
+   `pnpm smoke:agent` (agent, dry-run).
 5. Push ke `main` → Vercel auto-deploy. Perubahan agent = user harus re-install
    di kasir (curl one-liner).
 
