@@ -99,7 +99,7 @@ Scan dari HP → muncul `📥 [DRY-RUN] barcode diterima: 8991...` → berhenti 
 | Tidak ada barcode masuk | Cek `VSCAN_CODE` di `agent.env` masih benar & sesi aktif (12 jam) |
 | Barcode dobel di 2 komputer | Satu kode pairing = satu komputer kasir; buat kode baru untuk kasir lain |
 | Jendela POS tidak terisi | Pastikan jendela POS adalah yang aktif (scanner fisik juga begitu) |
-| **Enter SPAM / auto-repeat setelah scan** (POS dapat Enter berulang, tombol Enter fisik ikut mati; tombol Super/Win+Enter tetap jalan) | Enter tertinggal "tertekan" karena keyup-nya hilang. **v2.3+**: agent mendeteksi sesi & mencegah di semua platform — **Wayland** → otomatis pakai **ydotool** (uinput, level kernel, tidak bisa nyangkut); **X11** → verifikasi state Enter via **`XQueryKeymap`** setelah tiap scan (keyup ulang otomatis bila masih tertekan); **Windows** → scancode SendInput + `GetAsyncKeyState`. Banner startup log "Enter terdeteksi terlepas ✅". **Cek versi**: banner harus `v2.3`. **Perbaiki sekarang**: klik sekali tombol di on-screen keyboard (mis. `onboard`/`osk`) atau tekan tombol Super lalu Enter — atau restart sesi. |
+| **Enter SPAM / auto-repeat setelah scan** (POS dapat Enter berulang, tombol Enter fisik ikut mati; tombol Super/Win+Enter tetap jalan) | Enter tertinggal "tertekan" karena keyup-nya hilang. **v2.4+**: di **Wayland**, Enter kini ditekan dengan TAHAN EKSPLISIT (`ydotool key -d 80 28` = down → 80 ms → up) + safety-net keyup `28:0` — `ydotool key 28` lama (down+up tanpa jeda) bisa kehilangan keyup di compositor/XWayland; daemon ydotool juga dicek benar-benar merespons saat start (bukan cuma socket). **X11** → verifikasi state Enter via **`XQueryKeymap`**; **Windows** → scancode SendInput + `GetAsyncKeyState`. **Cek versi**: banner harus `v2.4`. **Perbaiki sekarang**: klik sekali tombol di on-screen keyboard (mis. `onboard`/`osk`) atau tekan tombol Super lalu Enter — atau restart sesi. |
 | **Keyboard fisik "nyangkut"** (mis. tombol Enter tidak berfungsi, dan baru jalan setelah menekan tombol di On-Screen Keyboard) | Satu tombol masih dianggap "tertekan" oleh OS (proses berhenti di tengah ketikan / keyup hilang). Agent versi terbaru **otomatis me-reset state keyboard** saat mulai, sebelum/sesudah tiap ketikan, dan saat berhenti (Ctrl+C / auto-start). **Perbaiki sekarang**: tekan tombol mana pun di On-Screen Keyboard (Windows: Win → ketik `osk`) atau tekan Shift 5× (reset Sticky Keys) — atau restart komputer. |
 
 ## Wayland (GNOME/KDE modern) — cara khusus
@@ -113,6 +113,8 @@ sudo systemctl enable --now ydotool   # daemon ydotool harus berjalan
 ```
 
 Lalu jalankan ulang agent — baris `Backend: ydotool (Wayland)` menandakan
-berhasil. Bila pakai distro lain tanpa paket `ydotool`, gunakan sesi **X11**
-untuk login (pilih "GNOME on Xorg" di layar login) — backend `pyautogui`
-langsung jalan.
+berhasil. Agent juga memverifikasi daemon ydotool benar-benar merespons saat
+start (bukan sekadar file socket tertinggal); kalau daemon mati, agent otomatis
+beralih permanen ke pyautogui dengan peringatan di log. Bila pakai distro lain
+tanpa paket `ydotool`, gunakan sesi **X11** untuk login (pilih "GNOME on
+Xorg" di layar login) — backend `pyautogui` langsung jalan.

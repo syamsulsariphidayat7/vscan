@@ -13,6 +13,34 @@ scanner USB, tanpa mengubah kode POS), atau via webhook/polling.
 
 ## Perubahan Terbaru
 
+### ⌨️ Fix #5: Enter loop masih terjadi di Wayland — ydotool key tanpa jeda kehilangan keyup (v2.4) (2026-08-06)
+- **Gejala (dikonfirmasi user)**: sudah v2.3 + backend `ydotool (Wayland)`
+  tapi **masih spam Enter + Enter fisik mati** setelah scan.
+- **Akar**: `ydotool key 28` mengirim down+up nyaris tanpa jeda — pada
+  compositor Wayland (terutama jendela XWayland seperti POS berbasis
+  browser/Electron) event keyup bisa hilang/tergabung → Enter dianggap
+  masih ditekan → auto-repeat (spam) + Enter fisik mati. Selain itu,
+  `_ydotool_ready()` hanya cek file socket — kalau daemon mati tapi socket
+  tertinggal, agent tiap scan jatuh ke fallback pyautogui (XWayland) yang
+  justru sumber masalah.
+- **Fix** di `scanner-agent/agent.py` v2.4:
+  - **Enter ditekan dengan TAHAN EKSPLIT di ydotool**: `ydotool key -d 80
+    28` (down → 80 ms → up — jeda antar event via `-d`, jadi keyup adalah
+    event terpisah yang tidak tergabung) + safety-net `ydotool key 28:0`
+    (keyup eksplisit, no-op bila sudah bersih). Di-verifikasi sintaks `-d`
+    & `28:0` jalan di mesin uji (exit 0).
+  - Jeda settle `ENTER_SETTLE_S` (50 ms) sebelum Enter, paritas dengan
+    jalur pyautogui.
+  - **`_ydotool_ready()` kini mengecek daemon benar-benar MERESPONS**
+    (kirim perintah no-op `28:0`, cek exit code, timeout 3 s) — bukan
+    cuma keberadaan socket. Cek ini juga dipakai di fallback no. 3
+    `select_typing_backend`.
+  - **Fallback ydotool → pyautogui sekarang PERMANEN** (log sekali, ganti
+    `_typing_impl`/`_typing_name` jadi `pyautogui (XWayland, fallback
+    ydotool)`) — bukan mencoba ydotool gagal tiap scan.
+- **Update kasir**: curl install ulang; cek banner `v2.4`. Kalau masih
+  `v2.3`, agent lama masih dipakai (restart agent, jangan ada 2 proses).
+
 ### 🐧 Fix #4: klarifikasi — kasir ternyata LINUX, fix diperluas ke semua platform (v2.3) (2026-08-06)
 - **Koreksi asumsi**: user menguji di **Linux** — "window+enter" = tombol
   Super/Win di keyboard, bukan OS Windows. Jadi masalah stuck-enter juga

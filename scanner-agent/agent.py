@@ -35,7 +35,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime
 
-AGENT_VERSION = "2.3"  # tampil di banner startup; naikkan tiap update penting
+AGENT_VERSION = "2.4"  # tampil di banner startup; naikkan tiap update penting
 
 _VK_RETURN = 0x0D  # VK code tombol Enter (Windows)
 
@@ -43,6 +43,7 @@ POLL_TIMEOUT = 15  # detik, timeout HTTP tiap polling (long-poll menahan ~6s)
 TYPEWRITE_INTERVAL = 0.02  # detik antar karakter barcode
 ENTER_SETTLE_S = 0.05  # jeda setelah ketik barcode, sebelum Enter
 ENTER_HOLD_S = 0.08  # durasi tombol Enter ditahan (<< batas auto-repeat ~0,5s)
+ENTER_HOLD_MS = int(ENTER_HOLD_S * 1000)  # versi milidetik utk opsi ydotool -d
 
 # Kirim scancode di Windows (diisi _get_win_sender saat pertama dipakai).
 # False = Windows API tidak tersedia / gagal inisialisasi.
@@ -320,38 +321,63 @@ def _type_with_pyautogui(pyautogui, barcode: str, enter: bool) -> None:
 
 
 def _ydotool_ready() -> bool:
-    """ydotool siap dipakai bila binary ADA dan daemon-nya berjalan (socket
-    daemon terpasang). Tanpa cek ini, preferensi ydotool bisa memilih jalur
-    yang gagal total saat daemon tidak jalan."""
+    """ydotool siap dipakai bila binary ADA dan daemon-nya benar-benar
+    MERESPONS — bukan sekadar socket tertinggal dari daemon yang sudah mati.
+
+    Kirim perintah no-op yang aman (`28:0` = release Enter; melepas tombol
+    yang tidak sedang ditekan tidak berdampak apa pun). Tanpa cek respons ini,
+    agent bisa memilih ydotool padahal daemon-nya mati → gagal tiap scan →
+    jatuh ke fallback pyautogui (XWayland) yang justru sumber Enter nyangkut.
+    """
     if not shutil.which("ydotool"):
         return False
-    uid = os.getuid() if hasattr(os, "getuid") else 1000
-    candidates = (
-        f"/run/user/{uid}/.ydotool_socket",
-        "/tmp/.ydotool_socket",
-        os.path.expanduser("~/.ydotool_socket"),
-    )
-    return any(os.path.exists(s) for s in candidates)
+    try:
+        r = subprocess.run(
+            ["ydotool", "key", "28:0"],
+            capture_output=True,
+            timeout=3,
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
 
 
 def _type_with_ydotool(barcode: str, enter: bool) -> None:
-    """Ketik via ydotool (Wayland). Butuh daemon ydotool berjalan:
-    sudo systemctl enable --now ydotool. Bila daemon mati/gagal, fallback
-    otomatis ke pyautogui supaya pengetikan tidak berhenti total."""
+    """Ketik via ydotool (Wayland/uinput). Butuh daemon ydotool berjalan:
+    sudo systemctl enable --now ydotool.
+
+    Enter ditekan dengan TAHAN EKSPLISIT: `ydotool key -d <ms> 28` (down →
+    jeda → up) lalu safety-net keyup `28:0`. Tanpa -d, ydotool mengirim
+    down+up nyaris tanpa jeda — compositor Wayland (terutama untuk jendela
+    XWayland seperti POS berbasis browser/Electron) bisa kehilangan event
+    keyup → Enter 'tertekan' selamanya → auto-repeat (SPAM Enter) dan tombol
+    Enter fisik ikut mati. Tahan ~80 ms masih jauh di bawah batas auto-repeat
+    (~500 ms), jadi aman.
+
+    Bila daemon mati/gagal: log SEKALI lalu beralih PERMANEN ke pyautogui
+    (bukan mencoba ydotool lagi tiap scan) supaya pengetikan tidak berhenti.
+    """
+    global _typing_impl, _typing_name
     try:
         subprocess.run(["ydotool", "type", "--key-delay", "10", barcode], check=True)
         if enter:
-            subprocess.run(["ydotool", "key", "28"], check=True)  # KEY_ENTER
+            # Jeda singkat: pastikan karakter terakhir barcode selesai
+            # diproses aplikasi sebelum Enter ditekan.
+            time.sleep(ENTER_SETTLE_S)
+            # Tekan+tahan+lepas: -d memberi jeda ANTAR event (down→up),
+            # jadi keyup adalah event terpisah yang tidak tergabung/hilang.
+            subprocess.run(
+                ["ydotool", "key", "-d", str(ENTER_HOLD_MS), "28"], check=True
+            )
+            # Safety-net: keyup eksplisit — no-op bila sudah terlepas, tapi
+            # melepas Enter yang 'nyangkut' bila keyup sebelumnya tetap hilang.
+            subprocess.run(["ydotool", "key", "28:0"], check=True)
     except Exception as e:
-        log(f"⚠️  ydotool gagal ({e}) — fallback ke pyautogui.")
+        log(f"⚠️  ydotool gagal ({e}) — beralih permanen ke pyautogui.")
         try:
-            import pyautogui
-
-            try:
-                pyautogui.PAUSE = 0.01
-            except Exception:
-                pass
-            _type_with_pyautogui(pyautogui, barcode, enter)
+            _typing_impl = _make_pyautogui_impl()
+            _typing_name = "pyautogui (XWayland, fallback ydotool)"
+            _typing_impl(barcode, enter)
         except Exception as e2:
             raise RuntimeError(f"ydotool dan pyautogui sama-sama gagal: {e2}") from e
 
@@ -402,6 +428,20 @@ def release_keys(pyautogui=None) -> None:
             pass
 
 
+def _make_pyautogui_impl():
+    """Import pyautogui (dengan PAUSE kecil) → kembalikan impl pengetikan.
+    Dipakai select_typing_backend & fallback ydotool supaya tidak duplikat."""
+    import pyautogui
+
+    # PAUSE bawaan pyautogui = 0,1 s PER panggilan — membuat release_keys
+    # (~20 keyUp) makan ~2 s tiap scan. Kecilkan agar tidak menambah delay.
+    try:
+        pyautogui.PAUSE = 0.01
+    except Exception:
+        pass
+    return lambda b, e: _type_with_pyautogui(pyautogui, b, e)
+
+
 def select_typing_backend(dry_run: bool) -> None:
     """Pilih backend ketik otomatis: pyautogui (X11) → ydotool (Wayland).
     Bila tidak ada yang bisa mengakses layar, cetak diagnosa & keluar."""
@@ -424,15 +464,7 @@ def select_typing_backend(dry_run: bool) -> None:
 
     # 2) X11 / Windows → pyautogui (XTest / SendInput)
     try:
-        import pyautogui
-
-        # PAUSE bawaan pyautogui = 0,1 s PER panggilan — membuat release_keys
-        # (~20 keyUp) makan ~2 s tiap scan. Kecilkan agar tidak menambah delay.
-        try:
-            pyautogui.PAUSE = 0.01
-        except Exception:
-            pass
-        _typing_impl = lambda b, e: _type_with_pyautogui(pyautogui, b, e)
+        _typing_impl = _make_pyautogui_impl()
         _typing_name = "pyautogui (XWayland)" if is_wayland else "pyautogui (X11)"
         return
     except ImportError:
@@ -441,20 +473,14 @@ def select_typing_backend(dry_run: bool) -> None:
         # Xlib/XauthError: coba temukan Xauthority lalu import ulang.
         found = detect_xauthority()
         try:
-            import pyautogui
-
-            try:
-                pyautogui.PAUSE = 0.01
-            except Exception:
-                pass
-            _typing_impl = lambda b, e: _type_with_pyautogui(pyautogui, b, e)
+            _typing_impl = _make_pyautogui_impl()
             _typing_name = f"pyautogui (X11, XAUTHORITY={found})" if found else "pyautogui (X11)"
             return
         except Exception:
             pass  # tetap gagal → coba ydotool
 
-    # 3) ydotool (Wayland tanpa deteksi / fallback)
-    if shutil.which("ydotool"):
+    # 3) ydotool (Wayland tanpa deteksi / fallback) — tetap wajib cek daemon
+    if _ydotool_ready():
         _typing_impl = lambda b, e: _type_with_ydotool(b, e)
         _typing_name = "ydotool (Wayland)"
         return
