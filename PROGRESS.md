@@ -11,6 +11,33 @@ scanner USB, tanpa mengubah kode POS), atau via webhook/polling.
 - **DB**: Neon Postgres — `DATABASE_URL` sudah di-set di Vercel (integrasi Vercel Postgres/Neon), migrasi `init` + `add_owner_id` sudah diterapkan
 - **PWA**: service worker network-first utk navigasi + cache `vscan-shell-v2` (update selalu ter-deliver)
 
+### 🚀 Auto-start agent Linux — mode SENYAP + log file (2026-08-07)
+- **Kondisi awal**: `.desktop` autostart di mesin kasir sudah ada TAPI menunjuk
+  ke folder repo (`/srv/http/vscan/scanner-agent`) yang tidak punya
+  `agent.env` → tiap login agent minta kode pairing (prompt v2.5) walau kode
+  sudah tersimpan di `~/vscan-agent/agent.env`.
+- **Keputusan user**: perbaiki mesin kasir + update script repo; mode = saran
+  saya → **SENYAP** (tanpa jendela, log ke file) — kasir tidak perlu jendela
+  terminal tiap login, log tetap bisa dicek.
+- **Implementasi**:
+  - `start-agent.sh --autostart` (baru): tanpa jendela, semua output ke
+    `agent.log`, retry otomatis **8× jeda 15 dtk** (jaringan/ydotool belum
+    siap saat login), berhenti bila `agent.env` kosong (log petunjuk), exit 0
+    (SIGTERM) tidak di-restart. Argumen tambahan diteruskan (bisa
+    `--autostart --dry-run` utk tes).
+  - `install-autostart-linux.sh` (rewrite): default **senyap**
+    (`Terminal=false` + `Exec=start-agent.sh --autostart`), opsi
+    `--terminal` (jendela log live) & `--uninstall`. Idempoten.
+  - `.gitignore`: `scanner-agent/agent.env`, `agent-state.json`, `agent.log`
+    (per-mesin, jangan ter-commit).
+- **Diterapkan di mesin kasir**: script baru disalin ke `~/vscan-agent`,
+  pyautogui di-install ke `.venv` (fallback; Wayland tetap ydotool — daemon
+  ydotool & socket terverifikasi jalan), autostart dipasang mode senyap,
+  `.desktop` kini menunjuk `~/vscan-agent/start-agent.sh --autostart`.
+- **Terverifikasi**: `bash -n` semua script; tes `start-agent.sh --autostart
+  --dry-run` → log: banner v2.5, Backend ydotool (Wayland), polling OK,
+  stop bersih. Agent real dijalankan & log dipantau.
+
 ### ⌨️ Agent v2.5 — input kode pairing interaktif (tanpa edit manual) (2026-08-07)
 - **Permintaan user**: "agent ada fitur masukan code biar gak manual" —
   sebelumnya kode pairing harus diisi manual ke `agent.env`/`--code`; tanpa

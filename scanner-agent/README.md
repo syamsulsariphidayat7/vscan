@@ -67,6 +67,16 @@ agent dari terminal (tanpa `agent.env`). Agent akan bertanya
 - **Windows**: double-click **`install-autostart-windows.bat`** (sekali saja).
 - **Linux**: jalankan `./install-autostart-linux.sh` (sekali saja).
 
+  Mode auto-start Linux (v2.5):
+  - **Default: SENYAP** — agent jalan di background tanpa jendela, semua log
+    ditulis ke **`agent.log`** (di folder yang sama). Saat login jaringan belum
+    siap → agent otomatis coba ulang (8×, jeda 15 dtk).
+  - `./install-autostart-linux.sh --terminal` — ganti ke jendela terminal
+    terbuka saat login (log live, cocok utk debugging).
+  - `./install-autostart-linux.sh --uninstall` — hapus auto-start.
+  - Tes tanpa menunggu login: `./start-agent.sh --autostart` (bisa ditambah
+    `--dry-run` utk tes tanpa mengetik).
+
 ## Uji dulu (disarankan)
 
 ```bash
@@ -106,6 +116,8 @@ Scan dari HP → muncul `📥 [DRY-RUN] barcode diterima: 8991...` → berhenti 
 | Tidak ada barcode masuk | Cek `VSCAN_CODE` di `agent.env` masih benar & sesi aktif (12 jam) |
 | Barcode dobel di 2 komputer | Satu kode pairing = satu komputer kasir; buat kode baru untuk kasir lain |
 | Jendela POS tidak terisi | Pastikan jendela POS adalah yang aktif (scanner fisik juga begitu) |
+| Auto-start Linux jalan tapi agent tidak polling | Cek log: `tail -50 ~/vscan-agent/agent.log` (mode senyap menulis ke sana; error & versi banner ada di situ) |
+| Ingin menghentikan agent yang berjalan | `pkill -f '[a]gent\\.py'` — tanda kurung `[a]` mencegah pkill membunuh shell sendiri (pola `agent.py` tanpa kurung ikut match command line `pkill` itu sendiri). Untuk stop+restart: `pkill -f '[a]gent\\.py'; sleep 1; ./start-agent.sh` |
 | **Enter SPAM / auto-repeat setelah scan** (POS dapat Enter berulang, tombol Enter fisik ikut mati; tombol Super/Win+Enter tetap jalan) | Enter tertinggal "tertekan" karena keyup-nya hilang. **v2.4+**: di **Wayland**, Enter kini ditekan dengan TAHAN EKSPLISIT (`ydotool key -d 80 28` = down → 80 ms → up) + safety-net keyup `28:0` — `ydotool key 28` lama (down+up tanpa jeda) bisa kehilangan keyup di compositor/XWayland; daemon ydotool juga dicek benar-benar merespons saat start (bukan cuma socket). **X11** → verifikasi state Enter via **`XQueryKeymap`**; **Windows** → scancode SendInput + `GetAsyncKeyState`. **Cek versi**: banner harus `v2.4`. **Perbaiki sekarang**: klik sekali tombol di on-screen keyboard (mis. `onboard`/`osk`) atau tekan tombol Super lalu Enter — atau restart sesi. |
 | **Keyboard fisik "nyangkut"** (mis. tombol Enter tidak berfungsi, dan baru jalan setelah menekan tombol di On-Screen Keyboard) | Satu tombol masih dianggap "tertekan" oleh OS (proses berhenti di tengah ketikan / keyup hilang). Agent versi terbaru **otomatis me-reset state keyboard** saat mulai, sebelum/sesudah tiap ketikan, dan saat berhenti (Ctrl+C / auto-start). **Perbaiki sekarang**: tekan tombol mana pun di On-Screen Keyboard (Windows: Win → ketik `osk`) atau tekan Shift 5× (reset Sticky Keys) — atau restart komputer. |
 

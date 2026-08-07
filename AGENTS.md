@@ -77,6 +77,12 @@ ke OS. **Ini bagian paling rapuh proyek — riwayat bug panjang soal Enter.**
   stdin interaktif, agent meminta kode, memvalidasi ke `POST /api/check`,
   lalu **menyimpan otomatis ke `agent.env`** (`save_code_to_env` — baris lain
   dipertahankan). Non-tty (auto-start) → prompt dilewati, error lama tetap.
+- **Auto-start Linux (v2.5)**: `install-autostart-linux.sh` default mode
+  **senyap** — `.desktop` `Terminal=false` menjalankan `start-agent.sh
+  --autostart` (log ke `agent.log`, retry 8× jeda 15 dtk saat login, berhenti
+  bila kode pairing kosong). Opsi `--terminal` (jendela log live) &
+  `--uninstall`. `agent.env`/`agent-state.json`/`agent.log` di-gitignore
+  (per-mesin).
 - **Backend ketik dipilih otomatis**:
   - **Wayland** → `ydotool` (uinput): ketik `type --key-delay 10`, Enter pakai
     `key -d 80 28` (down→jeda→up) + safety-net `key 28:0`. `_ydotool_ready()`

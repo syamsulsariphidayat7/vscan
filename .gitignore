@@ -37,3 +37,8 @@ next-env.d.ts
 # pnpm
 .pnpm-store/
 __pycache__/
+
+# scanner agent (per-mesin, jangan di-commit)
+/scanner-agent/agent.env
+/scanner-agent/agent-state.json
+/scanner-agent/agent.log
